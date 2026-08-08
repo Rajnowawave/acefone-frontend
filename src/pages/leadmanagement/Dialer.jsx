@@ -217,7 +217,6 @@ const RecentCallItem = React.memo(({ call, onCall }) => {
       <div className="dl-recent-info">
         <span className="dl-recent-name">{call.name || fmtPhone(num)}</span>
         <span className="dl-recent-meta">{call.answered_agent_name || "—"} · {fmtTimeAgo(ts)}</span>
-        {/* Show remark & outcome if present */}
         {call.remark && (
           <span className="dl-recent-remark">
             {call.outcome && (
@@ -348,7 +347,6 @@ const QuickNoteModal = ({ callData, onClose, onSave }) => {
       if (!res.ok) throw new Error("API error");
       onSave?.(note.trim(), outcome);
     } catch {
-      // Even if API fails, pass note to parent so it shows in UI
       onSave?.(note.trim(), outcome);
     } finally {
       setSaving(false);
@@ -418,7 +416,6 @@ const QuickNoteModal = ({ callData, onClose, onSave }) => {
 // ═══════════════════════════════════════════════════════════════════
 export default function Dialer({ onCallMade }) {
 
-  // ── Restore session on mount ───────────────────────────────────
   const session = readSession();
 
   const [selectedAgent, setSelectedAgent]     = useState(session?.selectedAgent || AGENTS[0]?.id || null);
@@ -446,28 +443,25 @@ export default function Dialer({ onCallMade }) {
   const toastT           = useRef();
   const didFetchRecent   = useRef(false);
   const didFetchContacts = useRef(false);
-  const pollRef          = useRef(null);   // setInterval id for call status polling
-  const endedRef         = useRef(false);  // prevents double-trigger of end-call flow
+  const pollRef          = useRef(null);
+  const endedRef         = useRef(false);
   const currentCallDataRef = useRef(currentCallData);
 
   useEffect(() => { currentCallDataRef.current = currentCallData; }, [currentCallData]);
 
   const currentAgent = useMemo(() => AGENTS.find((a) => a.id === selectedAgent) || null, [selectedAgent]);
 
-  // ── Persist session ────────────────────────────────────────────
   useEffect(() => {
     if (callState === "idle" && !quickNote) { clearSession(); return; }
     writeSession({ callState, number, callStartedAt, connectedAt, muted, held, speakerOn, selectedAgent, selectedContact, currentCallData, quickNote });
   }, [callState, number, callStartedAt, connectedAt, muted, held, speakerOn, selectedAgent, selectedContact, currentCallData, quickNote]);
 
-  // ── Toast ──────────────────────────────────────────────────────
   const showToast = useCallback((msg, ok = true) => {
     setToast({ show: true, msg, ok });
     clearTimeout(toastT.current);
     toastT.current = setTimeout(() => setToast((t) => ({ ...t, show: false })), 3500);
   }, []);
 
-  // ── fetchRecent ────────────────────────────────────────────────
   const fetchRecent = useCallback(async (force = false) => {
     if (document.hidden) return;
     const cached = readCache(CACHE_KEYS.RECENT);
@@ -488,7 +482,6 @@ export default function Dialer({ onCallMade }) {
     }
   }, []);
 
-  // ── Shared end-call logic ──────────────────────────────────────
   const triggerCallEnd = useCallback((cd) => {
     if (endedRef.current) return;
     endedRef.current = true;
@@ -504,7 +497,6 @@ export default function Dialer({ onCallMade }) {
     fetchRecent(true);
   }, [showToast, fetchRecent]);
 
-  // ── Poll backend for real call status (detects portal-side hangup) ──
   const startPolling = useCallback((callId, cdRef) => {
     clearInterval(pollRef.current);
     endedRef.current = false;
@@ -513,13 +505,11 @@ export default function Dialer({ onCallMade }) {
       try {
         let status = null;
 
-        // Primary: dedicated status endpoint
         const res = await fetch(`${API}/call-status/${callId}`);
         if (res.ok) {
           const data = await res.json();
           status = (data.status || data.call_status || "").toLowerCase();
         } else {
-          // Fallback: scan recent call-logs for this callId
           const logsRes = await fetch(`${API}/call-logs?limit=10`);
           if (logsRes.ok) {
             const logs = await logsRes.json();
@@ -535,15 +525,12 @@ export default function Dialer({ onCallMade }) {
         if (status && ENDED_STATUSES.includes(status)) {
           triggerCallEnd(cdRef.current);
         }
-      } catch {
-        // Network hiccup — keep polling
-      }
-    }, 3000); // check every 3 seconds
+      } catch { }
+    }, 3000);
   }, [triggerCallEnd]);
 
   useEffect(() => () => clearInterval(pollRef.current), []);
 
-  // ── fetchContacts ──────────────────────────────────────────────
   const fetchContacts = useCallback(async () => {
     if (document.hidden) return;
     const cached = readCache(CACHE_KEYS.CONTACTS);
@@ -563,7 +550,6 @@ export default function Dialer({ onCallMade }) {
     }
   }, []);
 
-  // ── Initial load ───────────────────────────────────────────────
   useEffect(() => {
     if (!didFetchRecent.current)   { didFetchRecent.current = true;   fetchRecent(); }
     if (!didFetchContacts.current) { didFetchContacts.current = true; fetchContacts(); }
@@ -578,7 +564,6 @@ export default function Dialer({ onCallMade }) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Keyboard ───────────────────────────────────────────────────
   useEffect(() => {
     const handleKey = (e) => {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
@@ -591,14 +576,12 @@ export default function Dialer({ onCallMade }) {
     return () => window.removeEventListener("keydown", handleKey);
   }, [number, callState]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Dial press ────────────────────────────────────────────────
   const handleDialPress = (key) => {
     playDTMF(key);
     if (callState === "connected") { showToast(`DTMF: ${key}`); return; }
     setNumber((n) => (n.length >= 15 ? n : n + key));
   };
 
-  // ── Initiate call ─────────────────────────────────────────────
   const handleCall = async (contactOverride) => {
     const dialNum  = contactOverride?.number || number;
     const dialName = contactOverride?.name   || selectedContact?.name || "";
@@ -629,7 +612,6 @@ export default function Dialer({ onCallMade }) {
         return;
       }
 
-      // Extract callId — support multiple field names from different backends
       const callId = data.callId || data.call_id || data.callSid || data.call_sid || data.id || "";
       const fullCallData = { number: cleanNum(dialNum), name: dialName, callId };
       setCurrentCallData(fullCallData);
@@ -640,11 +622,9 @@ export default function Dialer({ onCallMade }) {
       showToast(`Connected — ${dialName || fmtPhone(dialNum)}`);
       onCallMade?.({ number: cleanNum(dialNum), name: dialName, agentId: selectedAgent, callId });
 
-      // Start polling to detect when call is cut from portal side
       startPolling(callId || "__noid__", currentCallDataRef);
 
     } catch {
-      // Optimistic connect on network error
       setCallState("connected");
       setConnectedAt(Date.now());
       showToast(`Connected — ${dialName || fmtPhone(dialNum)}`);
@@ -652,10 +632,8 @@ export default function Dialer({ onCallMade }) {
     }
   };
 
-  // ── End call (manual button) ──────────────────────────────────
   const handleEndCall = async () => {
     const cd = currentCallDataRef.current;
-    // Tell backend to hang up
     if (cd?.callId) {
       try {
         await fetch(`${API}/call/${cd.callId}/end`, { method: "POST" });
@@ -664,7 +642,6 @@ export default function Dialer({ onCallMade }) {
     triggerCallEnd(cd);
   };
 
-  // ── Reset to idle ─────────────────────────────────────────────
   const handleNewCall = useCallback(() => {
     clearInterval(pollRef.current);
     endedRef.current = false;
@@ -681,12 +658,10 @@ export default function Dialer({ onCallMade }) {
     clearSession();
   }, []);
 
-  // ── Save note — updates recentCalls list immediately ──────────
   const handleSaveNote = useCallback((note, outcome) => {
     const cd = currentCallDataRef.current;
     if (note) {
       setRecentCalls((prev) => {
-        // Try to find matching entry by callId or number
         let found = false;
         const updated = prev.map((call) => {
           const byId  = cd?.callId && (call.id === cd.callId || call.callId === cd.callId || call.call_sid === cd.callId);
@@ -694,7 +669,6 @@ export default function Dialer({ onCallMade }) {
           if (byId || byNum) { found = true; return { ...call, remark: note, outcome }; }
           return call;
         });
-        // If no matching entry yet (call just ended), prepend a synthetic one
         if (!found && cd) {
           return [{
             id: cd.callId || `local-${Date.now()}`,
@@ -709,7 +683,6 @@ export default function Dialer({ onCallMade }) {
         }
         return updated;
       });
-      // Invalidate cache so next reload fetches fresh data with remark
       writeCache(CACHE_KEYS.RECENT, []);
       showToast("Note saved ✓");
     } else {
@@ -749,8 +722,8 @@ export default function Dialer({ onCallMade }) {
     if (!searchContacts) return recentCalls.slice(0, 30);
     const q = searchContacts.toLowerCase();
     return recentCalls.filter((c) => {
-      const num = c.call_to_number || c.caller_id_number || "";
-      return (c.name || "").toLowerCase().includes(q) || num.includes(q);
+      const n = c.call_to_number || c.caller_id_number || "";
+      return (c.name || "").toLowerCase().includes(q) || n.includes(q);
     }).slice(0, 30);
   }, [recentCalls, searchContacts]);
 
@@ -759,7 +732,6 @@ export default function Dialer({ onCallMade }) {
   const displayName    = currentCallData?.name   || selectedContact?.name || "";
   const matchedContact = number && !selectedContact ? contacts.find((c) => cleanNum(c.number).includes(number)) : null;
 
-  // ── Render ─────────────────────────────────────────────────────
   return (
     <div className="dl-root">
 
@@ -769,7 +741,6 @@ export default function Dialer({ onCallMade }) {
 
       <div className="dl-container">
 
-        {/* ═══ SIDEBAR ═══ */}
         <aside className="dl-sidebar">
           <div className="dl-sidebar-fixed">
             <div className="dl-sidebar-header">
@@ -860,10 +831,8 @@ export default function Dialer({ onCallMade }) {
           )}
         </aside>
 
-        {/* ═══ MAIN PANEL ═══ */}
         <main className="dl-main">
 
-          {/* ── Active Call ── */}
           {isCallActive && (
             <div className="dl-call-screen">
               <div className="dl-call-glow" />
@@ -939,7 +908,6 @@ export default function Dialer({ onCallMade }) {
             </div>
           )}
 
-          {/* ── Call Ended ── */}
           {callState === "ended" && (
             <div className="dl-ended-screen">
               <div className="dl-ended-check">
@@ -957,7 +925,6 @@ export default function Dialer({ onCallMade }) {
             </div>
           )}
 
-          {/* ── Idle Dialer ── */}
           {callState === "idle" && (
             <div className="dl-idle-screen">
               <div className="dl-display">
@@ -1022,7 +989,6 @@ export default function Dialer({ onCallMade }) {
         </main>
       </div>
 
-      {/* Modals */}
       {quickNote && (
         <QuickNoteModal
           callData={quickNote}
