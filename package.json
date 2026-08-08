@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
   "name": "site-visit-portal",
   "private": true,
   "version": "0.0.0",
@@ -104,26 +103,4 @@
   "keywords": [],
   "author": "",
   "license": "ISC"
-=======
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "exceljs": "^4.4.0",
-    "express": "^5.2.1",
-    "firebase-admin": "^13.8.0",
-    "node-fetch": "^3.3.2",
-    "puppeteer": "^24.42.0"
-  }
->>>>>>> 373d4daaa15efa7308f4bec1dbd9814defb77c20
 }
