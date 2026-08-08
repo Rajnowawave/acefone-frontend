@@ -1,0 +1,1373 @@
+/* ═══════════════════════════════════════════════════════════════
+   LOGIN PAGE — LUXURY WHITE EDITION
+   Navy + Warm White · Playfair Display + Plus Jakarta Sans
+   ═══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+/* ── Variables ── */
+:root {
+  --login-bg: #f4f3f0;
+  --login-card: #ffffff;
+  --login-section: #fafaf8;
+  --login-input-bg: #ffffff;
+  --login-hover: #f8f7f4;
+
+  --login-border-subtle: #e8e5de;
+  --login-border-normal: #d9d5cc;
+  --login-border-focus: #2c3e6b;
+
+  --login-navy: #1e2d5a;
+  --login-navy-mid: #2c3e6b;
+  --login-navy-light: #3d5080;
+  --login-navy-glow: rgba(44, 62, 107, 0.12);
+  --login-navy-pale: rgba(44, 62, 107, 0.05);
+
+  --login-accent: #c17f3e;
+  --login-accent-pale: rgba(193, 127, 62, 0.08);
+
+  --login-green: #27694f;
+  --login-green-pale: rgba(39, 105, 79, 0.06);
+  --login-green-border: rgba(39, 105, 79, 0.22);
+
+  --login-red: #c0392b;
+  --login-red-pale: rgba(192, 57, 43, 0.06);
+  --login-red-border: rgba(192, 57, 43, 0.22);
+
+  --login-text-primary: #1a1916;
+  --login-text-secondary: #4a4740;
+  --login-text-muted: #9b9690;
+
+  --login-shadow-card: 0 2px 48px rgba(30, 45, 90, 0.09), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --login-shadow-sm: 0 1px 4px rgba(30, 45, 90, 0.06);
+  --login-shadow-md: 0 4px 20px rgba(30, 45, 90, 0.10);
+  --login-shadow-lg: 0 8px 36px rgba(30, 45, 90, 0.14);
+  --login-shadow-btn: 0 6px 28px rgba(30, 45, 90, 0.26), 0 2px 6px rgba(30, 45, 90, 0.14);
+
+  --login-radius-sm: 6px;
+  --login-radius-md: 12px;
+  --login-radius-lg: 18px;
+  --login-radius-xl: 26px;
+  --login-radius-full: 999px;
+
+  --login-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --login-transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --login-transition-slow: 420ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Reset ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ══════════════════════════════════════════
+   MAIN CONTAINER
+══════════════════════════════════════════ */
+.advanced-login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  position: relative;
+  overflow: hidden;
+  background: var(--login-bg);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 50% -5%, rgba(44, 62, 107, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 95% 100%, rgba(193, 127, 62, 0.06) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%232c3e6b' fill-opacity='0.02'%3E%3Ccircle cx='40' cy='40' r='1'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* ══════════════════════════════════════════
+   BACKGROUND ELEMENTS
+══════════════════════════════════════════ */
+.background-elements {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+/* ── Geometric Shapes ── */
+.geometric-shapes {
+  position: absolute;
+  inset: 0;
+}
+
+.shape {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0;
+  animation: shapeReveal 1.2s ease forwards;
+}
+
+.shape-1 {
+  width: 420px;
+  height: 420px;
+  top: -140px;
+  left: -120px;
+  background: radial-gradient(circle, rgba(44, 62, 107, 0.08) 0%, transparent 70%);
+  animation-delay: 0.1s;
+}
+
+.shape-2 {
+  width: 320px;
+  height: 320px;
+  bottom: -100px;
+  right: -80px;
+  background: radial-gradient(circle, rgba(193, 127, 62, 0.06) 0%, transparent 70%);
+  animation-delay: 0.25s;
+}
+
+.shape-3 {
+  width: 240px;
+  height: 240px;
+  top: 45%;
+  right: 12%;
+  background: radial-gradient(circle, rgba(44, 62, 107, 0.05) 0%, transparent 70%);
+  animation-delay: 0.4s;
+}
+
+@keyframes shapeReveal {
+  to { opacity: 1; }
+}
+
+/* ── Infinity Symbols ── */
+.infinity-symbols {
+  position: absolute;
+  inset: 0;
+}
+
+.infinity-symbol {
+  position: absolute;
+  width: 40px;
+  height: 20px;
+  opacity: 0;
+  animation: infinityFloat linear infinite;
+}
+
+.infinity-symbol::before,
+.infinity-symbol::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid rgba(44, 62, 107, 0.06);
+  border-radius: 50%;
+}
+
+.infinity-symbol::before { left: 0; }
+.infinity-symbol::after { right: 0; }
+
+.infinity-symbol:nth-child(1) { top: 8%; left: 5%; animation-duration: 22s; animation-delay: 0s; }
+.infinity-symbol:nth-child(2) { top: 15%; right: 10%; animation-duration: 26s; animation-delay: 2s; }
+.infinity-symbol:nth-child(3) { top: 25%; left: 15%; animation-duration: 20s; animation-delay: 4s; }
+.infinity-symbol:nth-child(4) { top: 35%; right: 20%; animation-duration: 24s; animation-delay: 1s; }
+.infinity-symbol:nth-child(5) { top: 45%; left: 8%; animation-duration: 28s; animation-delay: 3s; }
+.infinity-symbol:nth-child(6) { top: 55%; right: 5%; animation-duration: 21s; animation-delay: 5s; }
+.infinity-symbol:nth-child(7) { top: 65%; left: 20%; animation-duration: 25s; animation-delay: 2s; }
+.infinity-symbol:nth-child(8) { top: 75%; right: 15%; animation-duration: 23s; animation-delay: 4s; }
+.infinity-symbol:nth-child(9) { top: 85%; left: 10%; animation-duration: 27s; animation-delay: 1s; }
+.infinity-symbol:nth-child(10) { top: 90%; right: 25%; animation-duration: 22s; animation-delay: 3s; }
+.infinity-symbol:nth-child(11) { top: 20%; left: 40%; animation-duration: 29s; animation-delay: 0s; }
+.infinity-symbol:nth-child(12) { top: 40%; left: 55%; animation-duration: 19s; animation-delay: 2s; }
+.infinity-symbol:nth-child(13) { top: 60%; left: 35%; animation-duration: 24s; animation-delay: 5s; }
+.infinity-symbol:nth-child(14) { top: 10%; left: 70%; animation-duration: 26s; animation-delay: 1s; }
+.infinity-symbol:nth-child(15) { top: 50%; left: 80%; animation-duration: 21s; animation-delay: 3s; }
+
+@keyframes infinityFloat {
+  0% {
+    transform: translateY(110vh) rotate(0deg) scale(0.5);
+    opacity: 0;
+  }
+  10% { opacity: 0.25; }
+  50% {
+    transform: translateY(50vh) rotate(180deg) scale(1);
+    opacity: 0.15;
+  }
+  90% { opacity: 0.25; }
+  100% {
+    transform: translateY(-10vh) rotate(360deg) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* ── Floating Dots ── */
+.floating-dots {
+  position: absolute;
+  inset: 0;
+}
+
+.dot {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(44, 62, 107, 0.08);
+  animation: dotFloat linear infinite;
+}
+
+.dot-1 { left: 5%; animation-duration: 18s; animation-delay: 0s; }
+.dot-2 { left: 10%; animation-duration: 22s; animation-delay: 1s; }
+.dot-3 { left: 15%; animation-duration: 16s; animation-delay: 3s; }
+.dot-4 { left: 20%; animation-duration: 25s; animation-delay: 2s; }
+.dot-5 { left: 25%; animation-duration: 20s; animation-delay: 4s; }
+.dot-6 { left: 30%; animation-duration: 19s; animation-delay: 0.5s; }
+.dot-7 { left: 35%; animation-duration: 23s; animation-delay: 2.5s; }
+.dot-8 { left: 40%; animation-duration: 17s; animation-delay: 1.5s; }
+.dot-9 { left: 45%; animation-duration: 24s; animation-delay: 3.5s; }
+.dot-10 { left: 50%; animation-duration: 21s; animation-delay: 0s; }
+.dot-11 { left: 55%; animation-duration: 18s; animation-delay: 2s; }
+.dot-12 { left: 60%; animation-duration: 26s; animation-delay: 4s; }
+.dot-13 { left: 65%; animation-duration: 15s; animation-delay: 1s; }
+.dot-14 { left: 70%; animation-duration: 22s; animation-delay: 3s; }
+.dot-15 { left: 75%; animation-duration: 20s; animation-delay: 0.5s; }
+.dot-16 { left: 80%; animation-duration: 24s; animation-delay: 2.5s; }
+.dot-17 { left: 85%; animation-duration: 17s; animation-delay: 1.5s; }
+.dot-18 { left: 90%; animation-duration: 23s; animation-delay: 3.5s; }
+.dot-19 { left: 93%; animation-duration: 19s; animation-delay: 4.5s; }
+.dot-20 { left: 97%; animation-duration: 21s; animation-delay: 0s; }
+
+@keyframes dotFloat {
+  0% {
+    transform: translateY(110vh);
+    opacity: 0;
+  }
+  10% { opacity: 0.4; }
+  90% { opacity: 0.4; }
+  100% {
+    transform: translateY(-10vh);
+    opacity: 0;
+  }
+}
+
+/* ══════════════════════════════════════════
+   LOGIN WRAPPER
+══════════════════════════════════════════ */
+.login-wrapper {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 440px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.login-wrapper.loaded {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.login-container-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* ══════════════════════════════════════════
+   LOGIN HEADER
+══════════════════════════════════════════ */
+.login-header {
+  text-align: center;
+  margin-bottom: 0;
+}
+
+.company-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ══════════════════════════════════════════
+   LOGIN CARD
+══════════════════════════════════════════ */
+.advanced-login-card {
+  width: 100%;
+  background: var(--login-card) !important;
+  border: 1px solid var(--login-border-subtle) !important;
+  border-radius: var(--login-radius-xl) !important;
+  box-shadow: var(--login-shadow-card) !important;
+  overflow: hidden !important;
+  position: relative;
+}
+
+.advanced-login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--login-navy-light) 25%,
+    var(--login-navy) 50%,
+    var(--login-navy-light) 75%,
+    transparent 100%
+  );
+  z-index: 2;
+}
+
+.advanced-login-card::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.8);
+  z-index: 2;
+}
+
+.advanced-login-card .ant-card-body {
+  padding: 36px 32px 32px !important;
+}
+
+/* ══════════════════════════════════════════
+   CARD HEADER / LOGO SECTION
+══════════════════════════════════════════ */
+.card-header-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.floating-logo {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  animation: logoFloat 3.5s ease-in-out infinite;
+}
+
+.floating-logo img {
+  max-width: 300%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(30, 45, 90, 0.12));
+}
+
+@keyframes logoFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ══════════════════════════════════════════
+   FORM STYLES
+══════════════════════════════════════════ */
+.advanced-login-form {
+  width: 100%;
+}
+
+/* ── Field Labels ── */
+.advanced-login-form .ant-form-item-label > label {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  color: var(--login-text-secondary) !important;
+}
+
+.advanced-login-form .ant-form-item-label > label::before {
+  display: none !important;
+}
+
+.advanced-login-form .ant-form-item {
+  margin-bottom: 20px !important;
+}
+
+/* ── Custom Input Wrapper ── */
+.custom-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.custom-input-wrapper .left-icon {
+  position: absolute;
+  left: 14px;
+  z-index: 2;
+  font-size: 15px;
+  color: var(--login-text-muted);
+  pointer-events: none;
+  transition: color var(--login-transition-normal);
+}
+
+.custom-input-wrapper:focus-within .left-icon {
+  color: var(--login-navy-mid);
+}
+
+/* ── Inputs ── */
+.custom-input.ant-input,
+.custom-input.ant-input-password .ant-input,
+.custom-input.ant-input-affix-wrapper {
+  width: 100% !important;
+  background: var(--login-input-bg) !important;
+  border: 1.5px solid var(--login-border-normal) !important;
+  border-radius: var(--login-radius-md) !important;
+  padding: 12px 16px 12px 42px !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  color: var(--login-text-primary) !important;
+  outline: none !important;
+  box-shadow: var(--login-shadow-sm) !important;
+  transition:
+    border-color var(--login-transition-normal),
+    box-shadow var(--login-transition-normal) !important;
+  height: 48px !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+.custom-input.ant-input-affix-wrapper {
+  padding: 0 !important;
+}
+
+.custom-input.ant-input-affix-wrapper .ant-input {
+  padding: 12px 16px 12px 42px !important;
+  height: 48px !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
+
+.custom-input.ant-input::placeholder,
+.custom-input.ant-input-affix-wrapper .ant-input::placeholder {
+  color: var(--login-text-muted) !important;
+  font-weight: 400 !important;
+  font-size: 0.82rem !important;
+  letter-spacing: 0.02em !important;
+}
+
+.custom-input.ant-input:focus,
+.custom-input.ant-input-affix-wrapper:focus,
+.custom-input.ant-input-affix-wrapper-focused {
+  border-color: var(--login-border-focus) !important;
+  box-shadow: 0 0 0 3px var(--login-navy-glow), var(--login-shadow-sm) !important;
+}
+
+.custom-input.ant-input:hover:not(:focus),
+.custom-input.ant-input-affix-wrapper:hover:not(:focus):not(.ant-input-affix-wrapper-focused) {
+  border-color: var(--login-navy-light) !important;
+}
+
+/* Password toggle icon */
+.custom-input.ant-input-affix-wrapper .ant-input-suffix {
+  margin-right: 10px;
+  color: var(--login-text-muted);
+}
+
+.custom-input.ant-input-affix-wrapper .ant-input-suffix .anticon {
+  font-size: 15px;
+  cursor: pointer;
+  transition: color var(--login-transition-fast);
+}
+
+.custom-input.ant-input-affix-wrapper .ant-input-suffix .anticon:hover {
+  color: var(--login-navy-mid);
+}
+
+/* Validation states */
+.ant-form-item-has-error .custom-input.ant-input,
+.ant-form-item-has-error .custom-input.ant-input-affix-wrapper {
+  border-color: var(--login-red) !important;
+  box-shadow: 0 0 0 3px var(--login-red-pale) !important;
+}
+
+.ant-form-item-has-error .custom-input-wrapper .left-icon {
+  color: var(--login-red) !important;
+}
+
+.ant-form-item-has-success .custom-input.ant-input,
+.ant-form-item-has-success .custom-input.ant-input-affix-wrapper {
+  border-color: var(--login-green) !important;
+}
+
+.ant-form-item-has-success .custom-input-wrapper .left-icon {
+  color: var(--login-green) !important;
+}
+
+/* Error / Help text */
+.advanced-login-form .ant-form-item-explain-error {
+  font-size: 0.72rem !important;
+  margin-top: 5px !important;
+  color: var(--login-red) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* ══════════════════════════════════════════
+   FORM OPTIONS (Remember Me)
+══════════════════════════════════════════ */
+.form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.form-options .ant-checkbox-wrapper {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  color: var(--login-text-secondary) !important;
+}
+
+.form-options .ant-checkbox .ant-checkbox-inner {
+  width: 18px !important;
+  height: 18px !important;
+  border: 1.5px solid var(--login-border-normal) !important;
+  border-radius: 4px !important;
+  background: var(--login-input-bg) !important;
+  transition: all var(--login-transition-fast) !important;
+}
+
+.form-options .ant-checkbox-checked .ant-checkbox-inner {
+  background: var(--login-navy) !important;
+  border-color: var(--login-navy) !important;
+}
+
+.form-options .ant-checkbox:hover .ant-checkbox-inner {
+  border-color: var(--login-navy-mid) !important;
+}
+
+/* ══════════════════════════════════════════
+   SUBMIT BUTTON
+══════════════════════════════════════════ */
+.custom-submit-btn.ant-btn {
+  width: 100% !important;
+  height: 50px !important;
+  border: none !important;
+  border-radius: var(--login-radius-md) !important;
+  background: linear-gradient(135deg, #1e2d5a 0%, #2c3e6b 50%, #1e2d5a 100%) !important;
+  background-size: 200% 100% !important;
+  color: #ffffff !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+  box-shadow: var(--login-shadow-btn) !important;
+  cursor: pointer !important;
+  transition:
+    transform var(--login-transition-fast),
+    box-shadow var(--login-transition-normal),
+    opacity var(--login-transition-fast) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.custom-submit-btn.ant-btn::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.13) 50%, transparent 100%) !important;
+  transform: translateX(-100%) !important;
+  transition: transform 0.5s ease !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.custom-submit-btn.ant-btn:hover:not(:disabled)::after {
+  transform: translateX(100%) !important;
+}
+
+.custom-submit-btn.ant-btn:hover:not(:disabled) {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 36px rgba(30, 45, 90, 0.32), 0 3px 10px rgba(30, 45, 90, 0.18) !important;
+}
+
+.custom-submit-btn.ant-btn:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+.custom-submit-btn.ant-btn[disabled] {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  background: linear-gradient(135deg, #8090b0 0%, #9aa5c0 100%) !important;
+  box-shadow: none !important;
+}
+
+/* Loading state */
+.custom-submit-btn.ant-btn-loading {
+  opacity: 0.85 !important;
+}
+
+.custom-submit-btn.ant-btn .ant-btn-loading-icon {
+  color: white !important;
+}
+
+/* ══════════════════════════════════════════
+   KEYBOARD SHORTCUT INDICATOR
+══════════════════════════════════════════ */
+.keyboard-shortcut-indicator {
+  text-align: center;
+  margin-top: 14px;
+  padding: 6px 14px;
+  background: var(--login-navy-pale);
+  border: 1px solid rgba(44, 62, 107, 0.12);
+  border-radius: var(--login-radius-full);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--login-navy-mid);
+  letter-spacing: 0.03em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: shortcutFade 2s ease forwards;
+}
+
+@keyframes shortcutFade {
+  0% { opacity: 0; transform: translateY(4px); }
+  15% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ══════════════════════════════════════════
+   SAVED EMAILS DROPDOWN
+══════════════════════════════════════════ */
+.saved-emails-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--login-card);
+  border: 1.5px solid var(--login-border-normal);
+  border-radius: var(--login-radius-md);
+  box-shadow: var(--login-shadow-md);
+  z-index: 100;
+  overflow: hidden;
+  animation: dropdownIn 0.2s ease;
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.saved-email-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background var(--login-transition-fast);
+  border-bottom: 1px solid var(--login-border-subtle);
+}
+
+.saved-email-item:last-child {
+  border-bottom: none;
+}
+
+.saved-email-item:hover {
+  background: var(--login-hover);
+}
+
+.saved-email-item span {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--login-text-secondary);
+}
+
+.saved-email-item .delete-btn {
+  background: none;
+  border: none;
+  color: var(--login-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all var(--login-transition-fast);
+  opacity: 0;
+}
+
+.saved-email-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.saved-email-item .delete-btn:hover {
+  color: var(--login-red);
+  background: var(--login-red-pale);
+}
+
+/* ══════════════════════════════════════════
+   LOADING SPINNER
+══════════════════════════════════════════ */
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--login-border-subtle);
+  border-top-color: var(--login-navy);
+  border-radius: 50%;
+  animation: loginSpin 0.8s linear infinite;
+  margin: 0 auto 12px;
+}
+
+@keyframes loginSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ══════════════════════════════════════════
+   SHAKE ANIMATION (Error)
+══════════════════════════════════════════ */
+.shake-animation {
+  animation: loginShake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes loginShake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+/* ══════════════════════════════════════════
+   SUBMITTING STATE
+══════════════════════════════════════════ */
+.advanced-login-form.submitting .custom-input-wrapper {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.advanced-login-form.submitting .form-options {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* ══════════════════════════════════════════
+   ANT DESIGN OVERRIDES
+══════════════════════════════════════════ */
+.advanced-login-card .ant-form-item-label {
+  padding-bottom: 6px !important;
+}
+
+/* Remove antd default focus ring */
+.advanced-login-form .ant-input:focus,
+.advanced-login-form .ant-input-focused,
+.advanced-login-form .ant-input-affix-wrapper:focus,
+.advanced-login-form .ant-input-affix-wrapper-focused {
+  outline: none !important;
+}
+
+/* Message override */
+.ant-message-notice-content {
+  border-radius: var(--login-radius-md) !important;
+  box-shadow: var(--login-shadow-lg) !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+
+/* ══════════════════════════════════════════
+   SCROLLBAR
+══════════════════════════════════════════ */
+.advanced-login-container ::-webkit-scrollbar {
+  width: 4px;
+}
+
+.advanced-login-container ::-webkit-scrollbar-track {
+  background: var(--login-bg);
+}
+
+.advanced-login-container ::-webkit-scrollbar-thumb {
+  background: var(--login-border-normal);
+  border-radius: 99px;
+}
+
+.advanced-login-container ::-webkit-scrollbar-thumb:hover {
+  background: var(--login-navy-light);
+}
+
+/* ══════════════════════════════════════════
+   SELECTION
+══════════════════════════════════════════ */
+.advanced-login-container ::selection {
+  background: rgba(44, 62, 107, 0.15);
+  color: var(--login-navy);
+}
+
+/* Focus reset */
+.advanced-login-container input:focus,
+.advanced-login-container button:focus {
+  outline: none;
+}
+
+.advanced-login-container button:focus-visible {
+  box-shadow: 0 0 0 3px var(--login-navy-glow);
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════ */
+@media (max-width: 520px) {
+  .advanced-login-container {
+    padding: 16px 12px;
+  }
+
+  .login-wrapper {
+    max-width: 100%;
+  }
+
+  .advanced-login-card .ant-card-body {
+    padding: 28px 22px 24px !important;
+  }
+
+  .advanced-login-card {
+    border-radius: var(--login-radius-lg) !important;
+  }
+
+  .floating-logo {
+    width: 64px;
+    height: 64px;
+  }
+
+  .custom-input.ant-input,
+  .custom-input.ant-input-affix-wrapper {
+    height: 44px !important;
+    font-size: 0.85rem !important;
+  }
+
+  .custom-input.ant-input-affix-wrapper .ant-input {
+    height: 44px !important;
+    font-size: 0.85rem !important;
+  }
+
+  .custom-submit-btn.ant-btn {
+    height: 46px !important;
+    font-size: 0.78rem !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .advanced-login-card .ant-card-body {
+    padding: 24px 18px 20px !important;
+  }
+
+  .card-header-section {
+    margin-bottom: 20px;
+  }
+
+  .floating-logo {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+/* ══════════════════════════════════════════
+   LANDSCAPE SMALL SCREENS
+══════════════════════════════════════════ */
+@media (max-height: 640px) and (orientation: landscape) {
+  .advanced-login-container {
+    padding: 12px;
+    align-items: flex-start;
+    padding-top: 20px;
+  }
+
+  .card-header-section {
+    margin-bottom: 16px;
+  }
+
+  .floating-logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .advanced-login-form .ant-form-item {
+    margin-bottom: 14px !important;
+  }
+
+  .form-options {
+    margin-bottom: 16px;
+  }
+}
+
+/* ══════════════════════════════════════════
+   PREFERS REDUCED MOTION
+══════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  .floating-logo {
+    animation: none;
+  }
+
+  .infinity-symbol,
+  .dot,
+  .shape {
+    animation: none !important;
+    opacity: 0.1;
+  }
+
+  .login-wrapper {
+    transition: none;
+  }
+
+  .keyboard-shortcut-indicator {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* ══════════════════════════════════════════
+   HIGH CONTRAST / ACCESSIBILITY
+══════════════════════════════════════════ */
+@media (prefers-contrast: high) {
+  .advanced-login-card {
+    border: 2px solid #333 !important;
+  }
+
+  .custom-input.ant-input,
+  .custom-input.ant-input-affix-wrapper {
+    border: 2px solid #555 !important;
+  }
+
+  .custom-submit-btn.ant-btn {
+    background: #1e2d5a !important;
+    box-shadow: none !important;
+  }
+}
+
+/* ══════════════════════════════════════════
+   PRINT
+══════════════════════════════════════════ */
+@media print {
+  .advanced-login-container {
+    background: white;
+  }
+
+  .background-elements,
+  .geometric-shapes,
+  .infinity-symbols,
+  .floating-dots {
+    display: none !important;
+  }
+
+  .advanced-login-card {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+
+  .custom-submit-btn.ant-btn {
+    background: #333 !important;
+    box-shadow: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LOGIN ERROR BANNER — Matches Luxury White Theme
+   ═══════════════════════════════════════════════════════════════ */
+
+.login-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  margin: 0 0 20px 0;
+  border-radius: 12px;
+  animation: error-banner-slide 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes error-banner-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Error Types Styling ── */
+
+/* Default / Both / Unknown */
+.login-error-banner {
+  background: linear-gradient(135deg, #fef2f2 0%, #fff5f5 100%);
+  border: 1.5px solid rgba(192, 57, 43, 0.2);
+  box-shadow: 0 4px 20px rgba(192, 57, 43, 0.08);
+}
+
+.login-error-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #c0392b, #e74c3c, #c0392b, transparent);
+}
+
+/* Email type */
+.login-error-banner.email {
+  background: linear-gradient(135deg, #eff6ff 0%, #f0f7ff 100%);
+  border-color: rgba(59, 130, 246, 0.22);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.08);
+}
+
+.login-error-banner.email::before {
+  background: linear-gradient(90deg, transparent, #3b82f6, #60a5fa, #3b82f6, transparent);
+}
+
+/* Password type */
+.login-error-banner.password {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef9e7 100%);
+  border-color: rgba(181, 98, 30, 0.22);
+  box-shadow: 0 4px 20px rgba(181, 98, 30, 0.08);
+}
+
+.login-error-banner.password::before {
+  background: linear-gradient(90deg, transparent, #b5621e, #d4732a, #b5621e, transparent);
+}
+
+/* Limit type */
+.login-error-banner.limit {
+  background: linear-gradient(135deg, #fffbeb 0%, #fffaf0 100%);
+  border-color: rgba(245, 158, 11, 0.25);
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.08);
+}
+
+.login-error-banner.limit::before {
+  background: linear-gradient(90deg, transparent, #f59e0b, #fbbf24, #f59e0b, transparent);
+}
+
+/* Network type */
+.login-error-banner.network {
+  background: linear-gradient(135deg, #f0fdfa 0%, #f0fdf4 100%);
+  border-color: rgba(6, 182, 212, 0.22);
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.08);
+}
+
+.login-error-banner.network::before {
+  background: linear-gradient(90deg, transparent, #06b6d4, #22d3ee, #06b6d4, transparent);
+}
+
+/* Account disabled */
+.login-error-banner.account {
+  background: linear-gradient(135deg, #fdf2f8 0%, #fef2f7 100%);
+  border-color: rgba(219, 39, 119, 0.22);
+  box-shadow: 0 4px 20px rgba(219, 39, 119, 0.08);
+}
+
+.login-error-banner.account::before {
+  background: linear-gradient(90deg, transparent, #db2777, #ec4899, #db2777, transparent);
+}
+
+/* ── Error Banner Parts ── */
+.error-banner-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+  animation: error-icon-bounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: 0.15s;
+}
+
+@keyframes error-icon-bounce {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.error-banner-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.error-banner-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1a1916;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.error-banner-suggestion {
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.error-banner-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  color: #9b9690;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  transition: all 150ms ease;
+  margin-top: 2px;
+}
+
+.error-banner-close:hover {
+  background: rgba(192, 57, 43, 0.08);
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.2);
+  transform: rotate(90deg);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SAVED EMAILS DROPDOWN
+   ═══════════════════════════════════════════════════════════════ */
+.saved-emails-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e8e5de;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(30, 45, 90, 0.12);
+  z-index: 100;
+  overflow: hidden;
+  animation: dropdown-in 0.2s ease both;
+}
+
+@keyframes dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.saved-emails-header {
+  padding: 10px 14px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9b9690;
+  border-bottom: 1px solid #e8e5de;
+  background: #fafaf8;
+}
+
+.saved-email-item {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #f4f3f0;
+}
+
+.saved-email-item:last-child {
+  border-bottom: none;
+}
+
+.saved-email-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #1a1916;
+  font-weight: 500;
+  text-align: left;
+  transition: background 150ms ease;
+}
+
+.saved-email-btn:hover {
+  background: rgba(44, 62, 107, 0.05);
+}
+
+.saved-email-btn .anticon {
+  color: #2c3e6b;
+  font-size: 0.85rem;
+}
+
+.saved-email-remove {
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #d9d5cc;
+  font-size: 0.78rem;
+  transition: all 150ms ease;
+}
+
+.saved-email-remove:hover {
+  color: #c0392b;
+  background: rgba(192, 57, 43, 0.04);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SHAKE ANIMATION
+   ═══════════════════════════════════════════════════════════════ */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+
+.shake-animation {
+  animation: shake 0.6s ease both !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FORM SUBMITTING STATE
+   ═══════════════════════════════════════════════════════════════ */
+.advanced-login-form.submitting {
+  pointer-events: none;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LOADING SPINNER
+   ═══════════════════════════════════════════════════════════════ */
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e8e5de;
+  border-top-color: #1e2d5a;
+  border-radius: 50%;
+  animation: login-spin 0.75s linear infinite;
+  margin: 0 auto 12px;
+}
+
+@keyframes login-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   KEYBOARD SHORTCUT INDICATOR
+   ═══════════════════════════════════════════════════════════════ */
+.keyboard-shortcut-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 14px;
+  background: rgba(44, 62, 107, 0.05);
+  border: 1px solid rgba(44, 62, 107, 0.12);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: #2c3e6b;
+  font-weight: 600;
+  animation: shortcut-fade 0.3s ease both;
+}
+
+@keyframes shortcut-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FORM FIELD ERROR STATES — Override Ant Design
+   ═══════════════════════════════════════════════════════════════ */
+.advanced-login-form .ant-form-item-has-error .custom-input-wrapper {
+  border-color: #c0392b !important;
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.08) !important;
+}
+
+.advanced-login-form .ant-form-item-has-error .left-icon {
+  color: #c0392b !important;
+}
+
+.advanced-login-form .ant-form-item-has-success .custom-input-wrapper {
+  border-color: #27694f !important;
+}
+
+.advanced-login-form .ant-form-item-has-success .left-icon {
+  color: #27694f !important;
+}
+
+/* Error help text styling */
+.advanced-login-form .ant-form-item-explain-error {
+  font-size: 0.75rem !important;
+  color: #c0392b !important;
+  background: rgba(192, 57, 43, 0.04);
+  border: 1px solid rgba(192, 57, 43, 0.12);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 6px;
+  font-weight: 500;
+  animation: error-text-in 0.25s ease both;
+}
+
+@keyframes error-text-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Success text */
+.advanced-login-form .ant-form-item-explain-success {
+  color: #27694f !important;
+  font-size: 0.72rem !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE ERROR BANNER
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .login-error-banner {
+    padding: 12px 14px;
+    gap: 10px;
+    border-radius: 10px;
+  }
+
+  .error-banner-icon {
+    font-size: 1.3rem;
+  }
+
+  .error-banner-title {
+    font-size: 0.8rem;
+  }
+
+  .error-banner-suggestion {
+    font-size: 0.7rem;
+  }
+
+  .error-banner-close {
+    width: 24px;
+    height: 24px;
+    font-size: 0.6rem;
+  }
+
+  .saved-emails-dropdown {
+    border-radius: 10px;
+  }
+}

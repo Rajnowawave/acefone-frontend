@@ -1,0 +1,227 @@
+/* CallAnalyticsDashboard.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  background-color: #F9FAFB;
+  color: #1C2025;
+  line-height: 1.5;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Animation keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Loading animation */
+.loading-container {
+  animation: fadeIn 0.8s ease-out;
+}
+
+/* Card animations */
+.MuiCard-root {
+  animation: fadeIn 0.6s ease-out;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.MuiCard-root:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Stats card hover effects */
+.stats-card-hover:hover .stats-icon {
+  animation: pulse 1s infinite;
+}
+
+/* Table row hover effects */
+.MuiDataGrid-row:hover {
+  background-color: rgba(0, 100, 177, 0.04) !important;
+  cursor: pointer;
+}
+
+/* Chart tooltip styling */
+.recharts-default-tooltip {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: none !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(10px);
+}
+
+/* Button hover effects */
+.MuiButton-root {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.MuiButton-contained:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 100, 177, 0.3);
+}
+
+.MuiButton-outlined:hover {
+  transform: translateY(-1px);
+  background-color: rgba(0, 100, 177, 0.04);
+}
+
+/* Chip styling */
+.MuiChip-root {
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.MuiChip-root:hover {
+  transform: scale(1.05);
+}
+
+/* Modal animations */
+.MuiDialog-paper {
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Progress bar styling */
+.MuiLinearProgress-root {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.MuiLinearProgress-bar {
+  transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Avatar styling */
+.MuiAvatar-root {
+  transition: all 0.3s ease;
+}
+
+.MuiAvatar-root:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Tab styling */
+.MuiTab-root {
+  font-weight: 600 !important;
+  text-transform: none !important;
+}
+
+/* DataGrid styling */
+.MuiDataGrid-root {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+
+.MuiDataGrid-columnHeader {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  font-weight: 700 !important;
+  color: #475569 !important;
+}
+
+.MuiDataGrid-cell {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.03) !important;
+}
+
+.MuiDataGrid-row:nth-of-type(even) {
+  background-color: rgba(248, 250, 252, 0.5);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .MuiContainer-root {
+    padding: 16px !important;
+  }
+  
+  .MuiCard-root {
+    margin-bottom: 16px;
+  }
+  
+  .MuiTypography-h4 {
+    font-size: 1.75rem !important;
+  }
+  
+  .stats-container {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .MuiTypography-h4 {
+    font-size: 1.5rem !important;
+  }
+  
+  .MuiButton-root {
+    padding: 8px 12px !important;
+    font-size: 0.875rem !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  .MuiButton-root,
+  .MuiSpeedDial-root,
+  .MuiFab-root {
+    display: none !important;
+  }
+  
+  .MuiPaper-root {
+    box-shadow: none !important;
+    border: 1px solid #e0e0e0 !important;
+  }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .MuiCard-root {
+    border: 2px solid #000 !important;
+  }
+  
+  .MuiButton-outlined {
+    border-width: 2px !important;
+  }
+}

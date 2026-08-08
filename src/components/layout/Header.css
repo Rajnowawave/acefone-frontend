@@ -1,0 +1,223 @@
+/* ═══════════════════════════════════════════════════════
+   HEADER CSS — ADINATH BUILDWELL CRM
+   MOBILE FIXED VERSION
+   ═══════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+.hd-header {
+  position: fixed;
+  top: 0;
+  left: var(--sb-width, 260px);   /* offset sidebar on desktop */
+  right: 0;
+  height: 58px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--sb-border, #e8e5de);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px 0 20px;
+  z-index: 800;                   /* below sidebar (1002) and overlay (1001) */
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  box-shadow: 0 1px 12px rgba(30, 45, 90, 0.06);
+  box-sizing: border-box;
+}
+
+/* Subtle bottom accent */
+.hd-header::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(30, 45, 90, 0.12) 30%,
+    rgba(193, 127, 62, 0.22) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* ── Left ── */
+.hd-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Hamburger — hidden on desktop, shown on mobile ── */
+.hd-hamburger {
+  display: none;             /* hidden desktop */
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #4a4740;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  padding: 0;
+  outline: none;
+  position: relative;
+  z-index: 801;              /* must be above header's stacking */
+}
+
+.hd-hamburger:hover,
+.hd-hamburger:active {
+  background: rgba(44, 62, 107, 0.1);
+  color: #1e2d5a;
+}
+
+/* ── Mobile brand (hidden desktop) ── */
+.hd-brand-mobile {
+  display: none;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.hd-brand-mobile__name {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e2d5a;
+}
+
+.hd-brand-mobile__sub {
+  font-size: 9px;
+  font-weight: 600;
+  color: #9b9690;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ── Right ── */
+.hd-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Role Badge ── */
+.hd-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.hd-badge--admin {
+  background: rgba(30, 45, 90, 0.09);
+  color: #1e2d5a;
+  border: 1px solid rgba(30, 45, 90, 0.18);
+}
+
+.hd-badge--client {
+  background: rgba(193, 127, 62, 0.1);
+  color: #9a5f28;
+  border: 1px solid rgba(193, 127, 62, 0.22);
+}
+
+.hd-badge--user {
+  background: rgba(39, 105, 79, 0.09);
+  color: #27694f;
+  border: 1px solid rgba(39, 105, 79, 0.2);
+}
+
+/* ── Logout Button ── */
+.hd-logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(192, 57, 43, 0.3);
+  background: rgba(192, 57, 43, 0.05);
+  color: #c0392b;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background 150ms, border-color 150ms;
+  outline: none;
+}
+
+.hd-logout:hover:not(:disabled),
+.hd-logout:active:not(:disabled) {
+  background: rgba(192, 57, 43, 0.12);
+  border-color: rgba(192, 57, 43, 0.45);
+}
+
+.hd-logout:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@keyframes hd-spin {
+  to { transform: rotate(360deg); }
+}
+
+.hd-logout__spinner {
+  animation: hd-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════
+   MOBILE ≤1024px
+═══════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .hd-header {
+    left: 0 !important;  /* full width — no sidebar offset */
+  }
+
+  .hd-hamburger {
+    display: flex !important;  /* show hamburger */
+  }
+
+  .hd-brand-mobile {
+    display: flex;
+  }
+}
+
+/* Very small screens */
+@media (max-width: 480px) {
+  .hd-header {
+    padding: 0 12px 0 10px;
+  }
+
+  .hd-badge span {
+    display: none;
+  }
+
+  .hd-badge {
+    padding: 6px 8px;
+    border-radius: 8px;
+  }
+
+  .hd-logout span {
+    display: none;
+  }
+
+  .hd-logout {
+    padding: 8px 10px;
+    gap: 0;
+  }
+}

@@ -1,0 +1,59 @@
+/* ═══════════════════════════════════════════════════════
+   MAIN LAYOUT CSS — ADINATH BUILDWELL CRM
+   ═══════════════════════════════════════════════════════ */
+
+/* 
+  CRITICAL: Override the old Navbar.css body { padding-top } rules.
+  Those rules were for the top navbar. Now we use a left sidebar.
+*/
+body,
+body * {
+  /* nothing — just ensuring cascade doesn't block interactions */
+}
+
+body {
+  padding-top: 0 !important;
+  margin: 0 !important;
+}
+
+/* Ensure nothing above z-index 1002 accidentally covers interactive elements */
+#root {
+  position: relative;
+  z-index: 0;
+}
+
+/* ── Full-screen shell ── */
+.ml-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #f4f3f0;
+  position: relative;
+}
+
+/* ── Main column — offset by sidebar on desktop ── */
+.ml-main {
+  flex: 1;
+  min-width: 0;
+  margin-left: var(--sb-width, 260px);
+  display: flex;
+  flex-direction: column;
+  /* smooth transition if sidebar width changes */
+  transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Content area — below fixed header ── */
+.ml-content {
+  padding-top: 58px;          /* exact height of .hd-header */
+  flex: 1;
+  min-height: calc(100vh - 58px);
+  /* each page manages its own inner padding/background */
+}
+
+/* ═══════════════════════════════════════
+   MOBILE ≤1024px — no sidebar margin
+═══════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .ml-main {
+    margin-left: 0 !important;
+  }
+}

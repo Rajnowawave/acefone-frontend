@@ -1,0 +1,9 @@
+node_modules/
+<<<<<<< HEAD
+dist/
+.env
+=======
+.env
+firebase.json
+session.json
+>>>>>>> 373d4daaa15efa7308f4bec1dbd9814defb77c20
