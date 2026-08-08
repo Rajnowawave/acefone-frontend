@@ -558,8 +558,8 @@ export default function Dialer({ onCallMade }) {
       }
     } catch { }
     if (!cached?.data?.length) {
-      setContacts(demo);
-      writeCache(CACHE_KEYS.CONTACTS, demo);
+      setContacts([]);
+      writeCache(CACHE_KEYS.CONTACTS, []);
     }
   }, []);
 

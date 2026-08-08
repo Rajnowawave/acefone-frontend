@@ -129,7 +129,7 @@ export default function AdvancedNavbar() {
           <NavLink className="an-brand" to={getHomeLink()}>
             <div className="an-brand-logo-wrap">
               <img
-                src="Adinath-logo.jpg"
+                src="/Adinath-logo.jpg"
                 alt="Adinath Buildwell Logo"
                 className="an-brand-logo"
               />
@@ -207,7 +207,7 @@ export default function AdvancedNavbar() {
         <div className="an-mobile-header">
           <div className="an-mobile-brand">
             <img
-              src="Adinath-logo.jpg"
+              src="/Adinath-logo.jpg"
               alt="Logo"
               className="an-mobile-logo"
             />
