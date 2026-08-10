@@ -17,6 +17,7 @@ const HISTORY_CACHE_TTL = 10 * 60 * 1000;
 const AUTO_REFRESH_INTERVAL = 60 * 1000;
 const SEARCH_DEBOUNCE = 300;
 const CACHE_VERSION = 2;
+const TOAST_TTL = 3500;
 
 // ─── Name Map Cache ───────────────────────────────────────────────────────────
 const NAME_MAP_KEY = "cl_name_map_v1";
@@ -56,6 +57,100 @@ const lookupName = (number) => {
   const key = cleanNum(number);
   if (!key) return null;
   return map[key] || null;
+};
+
+// ─── Tags Store (client-side, per call id) ────────────────────────────────────
+const TAGS_KEY = "cl_tags_v1";
+
+const getTagsMap = () => {
+  try {
+    const raw = localStorage.getItem(TAGS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const setTagsMapStorage = (map) => {
+  try {
+    localStorage.setItem(TAGS_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.error("Tags write error:", e);
+  }
+};
+
+const TAG_PALETTE = [
+  "#2c3e6b",
+  "#c17f3e",
+  "#27694f",
+  "#b5621e",
+  "#6d28d9",
+  "#1d4ed8",
+  "#c0392b",
+];
+
+const tagColor = (t = "") => {
+  let sum = 0;
+  for (let i = 0; i < t.length; i++) sum += t.charCodeAt(i);
+  return TAG_PALETTE[sum % TAG_PALETTE.length];
+};
+
+// ─── Saved Views ──────────────────────────────────────────────────────────────
+const VIEWS_KEY = "cl_views_v1";
+
+const getSavedViews = () => {
+  try {
+    const raw = localStorage.getItem(VIEWS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+const setSavedViewsStorage = (views) => {
+  try {
+    localStorage.setItem(VIEWS_KEY, JSON.stringify(views));
+  } catch (e) {
+    console.error("Views write error:", e);
+  }
+};
+
+// ─── Column visibility + density ──────────────────────────────────────────────
+const COLS_KEY = "cl_cols_v1";
+const DEFAULT_COLS = {
+  type: true,
+  datetime: true,
+  status: true,
+  agent: true,
+  duration: true,
+  recording: true,
+  tags: true,
+};
+
+const getSavedCols = () => {
+  try {
+    const raw = localStorage.getItem(COLS_KEY);
+    return raw ? { ...DEFAULT_COLS, ...JSON.parse(raw) } : { ...DEFAULT_COLS };
+  } catch {
+    return { ...DEFAULT_COLS };
+  }
+};
+
+const setSavedCols = (cols) => {
+  try {
+    localStorage.setItem(COLS_KEY, JSON.stringify(cols));
+  } catch (e) {
+    console.error("Column prefs write error:", e);
+  }
+};
+
+const DENSITY_KEY = "cl_density_v1";
+const getSavedDensity = () => {
+  try {
+    return localStorage.getItem(DENSITY_KEY) || "comfortable";
+  } catch {
+    return "comfortable";
+  }
 };
 
 // ─── Cache Helpers ────────────────────────────────────────────────────────────
@@ -209,7 +304,7 @@ const extractCallNumbers = (call) => {
   return [...nums];
 };
 
-// ─── Resolve display name for a call (checks name map first) ─────────────────
+// ─── Resolve display name for a call ─────────────────────────────────────────
 const resolveDisplayName = (call) => {
   if (!call) return null;
   const numbers = extractCallNumbers(call);
@@ -386,21 +481,12 @@ const findAgentInDirectory = (value, directory) => {
   return null;
 };
 
-// ─── NEW: Resolve ALL missed agents from a single call record ─────────────────
-/**
- * Extracts every missed agent entry from a call record.
- * Handles:
- *  - call_flow array (multiple agent nodes)
- *  - missed_agents array
- *  - answered_agent / missed_agent objects
- *  - flat fields
- * Returns array of { name, ext, number, source }
- */
+// ─── Resolve ALL missed agents from a single call record ──────────────────────
 const resolveAllMissedAgents = (call, agentDirectory) => {
   if (!call) return [];
 
   const results = [];
-  const seen = new Set(); // dedupe by name+ext
+  const seen = new Set();
 
   const addAgent = (name, ext, number, source) => {
     const key = `${name || ""}|${ext || ""}|${number || ""}`;
@@ -409,32 +495,7 @@ const resolveAllMissedAgents = (call, agentDirectory) => {
     results.push({ name, ext, number, source });
   };
 
-  const resolveCandidate = (candidates, source) => {
-    let name = firstText(candidates.map((c) => c.name));
-    let mobile = firstMobile(candidates.map((c) => c.mobile || c.number || c.agent_number || ""));
-    let ext = firstShortExt(candidates.map((c) => c.ext || c.extension || ""));
-
-    // Try directory lookup
-    const allNums = candidates.flatMap((c) => [
-      c.mobile, c.number, c.agent_number, c.ext, c.extension, c.id,
-    ]).filter(Boolean);
-
-    let matched = null;
-    for (const v of allNums) {
-      matched = findAgentInDirectory(v, agentDirectory);
-      if (matched) break;
-    }
-
-    name = name || matched?.name || null;
-    mobile = mobile || matched?.mobile || null;
-    ext = ext || matched?.ext || null;
-
-    if (name || ext || mobile) {
-      addAgent(name, ext, mobile, source);
-    }
-  };
-
-  // 1. call_flow array — each agent node could be a separate agent
+  // 1. call_flow array
   if (Array.isArray(call.call_flow)) {
     call.call_flow.forEach((node, idx) => {
       if (norm(node?.type) !== "agent") return;
@@ -445,10 +506,10 @@ const resolveAllMissedAgents = (call, agentDirectory) => {
         norm(node?.status) === "no_answer" ||
         norm(node?.status) === "failed" ||
         norm(node?.status) === "busy" ||
-        // if the whole call is missed and node has no explicit status, treat as missed
         (["missed", "no-answer", "no_answer", "failed", "busy"].includes(
           norm(call.call_status)
-        ) && !node?.status);
+        ) &&
+          !node?.status);
 
       if (!isMissedNode) return;
 
@@ -471,7 +532,6 @@ const resolveAllMissedAgents = (call, agentDirectory) => {
       const mobile = firstMobile(numCandidates);
       const ext = firstShortExt(extCandidates);
 
-      // Directory lookup
       let matched = null;
       for (const v of [...numCandidates, ...extCandidates].filter(Boolean)) {
         matched = findAgentInDirectory(v, agentDirectory);
@@ -488,17 +548,30 @@ const resolveAllMissedAgents = (call, agentDirectory) => {
     });
   }
 
-  // 2. missed_agents array (some APIs return this)
+  // 2. missed_agents array
   if (Array.isArray(call.missed_agents)) {
     call.missed_agents.forEach((a, idx) => {
       const obj = getSafeObj(a);
       if (!obj) return;
       const name = firstText([obj.name, obj.agent_name, obj.agentName]);
-      const mobile = firstMobile([obj.agent_number, obj.mobile, obj.number, obj.num]);
+      const mobile = firstMobile([
+        obj.agent_number,
+        obj.mobile,
+        obj.number,
+        obj.num,
+      ]);
       const ext = firstShortExt([obj.extension, obj.ext, obj.exten]);
 
       let matched = null;
-      for (const v of [obj.agent_number, obj.mobile, obj.number, obj.num, obj.extension, obj.ext, obj.id].filter(Boolean)) {
+      for (const v of [
+        obj.agent_number,
+        obj.mobile,
+        obj.number,
+        obj.num,
+        obj.extension,
+        obj.ext,
+        obj.id,
+      ].filter(Boolean)) {
         matched = findAgentInDirectory(v, agentDirectory);
         if (matched) break;
       }
@@ -517,11 +590,24 @@ const resolveAllMissedAgents = (call, agentDirectory) => {
   const missedObj = getSafeObj(call.missed_agent);
   if (missedObj) {
     const name = firstText([missedObj.name, missedObj.agent_name]);
-    const mobile = firstMobile([missedObj.agent_number, missedObj.mobile, missedObj.number, missedObj.num]);
+    const mobile = firstMobile([
+      missedObj.agent_number,
+      missedObj.mobile,
+      missedObj.number,
+      missedObj.num,
+    ]);
     const ext = firstShortExt([missedObj.extension, missedObj.ext]);
 
     let matched = null;
-    for (const v of [missedObj.agent_number, missedObj.mobile, missedObj.number, missedObj.num, missedObj.extension, missedObj.ext, missedObj.id].filter(Boolean)) {
+    for (const v of [
+      missedObj.agent_number,
+      missedObj.mobile,
+      missedObj.number,
+      missedObj.num,
+      missedObj.extension,
+      missedObj.ext,
+      missedObj.id,
+    ].filter(Boolean)) {
       matched = findAgentInDirectory(v, agentDirectory);
       if (matched) break;
     }
@@ -535,8 +621,7 @@ const resolveAllMissedAgents = (call, agentDirectory) => {
     }
   }
 
-  // 4. Flat fields (fallback)
-  // Only add if nothing found yet from structured data
+  // 4. Flat fields fallback
   if (results.length === 0) {
     const flatNameCandidates = [
       call.missed_agent_name,
@@ -551,18 +636,16 @@ const resolveAllMissedAgents = (call, agentDirectory) => {
       call.agent_mobile,
       call.agent_number,
     ];
-    const flatExtCandidates = [
-      call.agent_extension,
-      call.extension,
-      call.ext,
-    ];
+    const flatExtCandidates = [call.agent_extension, call.extension, call.ext];
 
     const name = firstText(flatNameCandidates);
     const mobile = firstMobile(flatMobileCandidates);
     const ext = firstShortExt(flatExtCandidates);
 
     let matched = null;
-    for (const v of [...flatMobileCandidates, ...flatExtCandidates].filter(Boolean)) {
+    for (const v of [...flatMobileCandidates, ...flatExtCandidates].filter(
+      Boolean
+    )) {
       matched = findAgentInDirectory(v, agentDirectory);
       if (matched) break;
     }
@@ -579,7 +662,7 @@ const resolveAllMissedAgents = (call, agentDirectory) => {
   return results;
 };
 
-// ─── Resolve single agent info (for answered calls, live modal, etc.) ─────────
+// ─── Resolve single agent info ────────────────────────────────────────────────
 const resolveAgentInfo = (call, agentDirectory) => {
   if (!call) {
     return {
@@ -815,6 +898,73 @@ const apiJson = async (url, options) => {
   return resp.json();
 };
 
+// ─── CSV Export ───────────────────────────────────────────────────────────────
+const escapeCSV = (v) => {
+  const s = String(v ?? "");
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+};
+
+const exportCSV = (calls, agentDirectory, tagsMap, filename) => {
+  const headers = [
+    "Date",
+    "Time",
+    "Direction",
+    "Number",
+    "Name",
+    "Status",
+    "Agent",
+    "Ext",
+    "Duration",
+    "Outcome",
+    "Remark",
+    "Tags",
+  ];
+
+  const rows = calls.map((c) => {
+    const { date, time } = fmtTime(c);
+    const dir = norm(c.direction);
+    const num =
+      dir === "inbound"
+        ? c.client_number || c.caller_id_number || c.call_to_number || ""
+        : c.call_to_number || c.client_number || "";
+    const name = resolveDisplayName(c) || c.name || "";
+    const info = resolveAgentInfo(c, agentDirectory);
+    const tags = (tagsMap[c.id || c.uuid] || []).join("; ");
+
+    return [
+      date,
+      time,
+      c.direction || "",
+      num,
+      name,
+      c.call_status || "",
+      info.label || "",
+      info.ext || "",
+      fmtDur(c.billsec),
+      c._outcome || "",
+      c._remark || "",
+      tags,
+    ];
+  });
+
+  const csv = [headers, ...rows]
+    .map((r) => r.map(escapeCSV).join(","))
+    .join("\n");
+
+  const blob = new Blob(["\uFEFF" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename || `call-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
 // ─── Badge ────────────────────────────────────────────────────────────────────
 const Badge = React.memo(({ status, direction, outcome }) => {
   if (direction) {
@@ -873,7 +1023,7 @@ const Badge = React.memo(({ status, direction, outcome }) => {
   return <span className={`cl-badge ${m.cls}`}>{m.label}</span>;
 });
 
-// ─── AgentDisplay — NOW SHOWS ALL MISSED AGENTS ───────────────────────────────
+// ─── AgentDisplay ─────────────────────────────────────────────────────────────
 const AgentDisplay = React.memo(({ call, agentDirectory }) => {
   const isMissed = [
     "missed",
@@ -883,19 +1033,16 @@ const AgentDisplay = React.memo(({ call, agentDirectory }) => {
     "busy",
   ].includes(norm(call.call_status));
 
-  // For missed calls: resolve ALL missed agents
   const allMissedAgents = useMemo(() => {
     if (!isMissed) return [];
     return resolveAllMissedAgents(call, agentDirectory);
   }, [call, agentDirectory, isMissed]);
 
-  // For answered calls: resolve single agent info
   const info = useMemo(
     () => (!isMissed ? resolveAgentInfo(call, agentDirectory) : null),
     [call, agentDirectory, isMissed]
   );
 
-  // ── MISSED CALL: show all agents ──
   if (isMissed) {
     if (allMissedAgents.length === 0) {
       return <span className="cl-agent cl-agent--none">—</span>;
@@ -912,16 +1059,16 @@ const AgentDisplay = React.memo(({ call, agentDirectory }) => {
               <span className="cl-agent-missed-name">
                 {agent.name || agent.number || agent.ext || "Unknown"}
               </span>
+              {agent.ext && (
+                <span className="cl-agent-num">Ext: {agent.ext}</span>
+              )}
             </div>
           </div>
-          {agent.ext && (
-            <span className="cl-agent-num">Ext: {agent.ext}</span>
-          )}
         </div>
       );
     }
 
-    // Multiple missed agents
+    // Multiple missed agents - scrollable
     return (
       <div className="cl-agent-wrap">
         <div className="cl-agent-missed-multi-header">
@@ -930,7 +1077,7 @@ const AgentDisplay = React.memo(({ call, agentDirectory }) => {
             Missed by {allMissedAgents.length} agents
           </span>
         </div>
-        <div className="cl-agent-missed-list">
+        <div className="cl-agent-missed-scroll">
           {allMissedAgents.map((agent, idx) => (
             <div key={idx} className="cl-agent-missed-item">
               <span className="cl-agent-missed-dot" />
@@ -952,7 +1099,6 @@ const AgentDisplay = React.memo(({ call, agentDirectory }) => {
     );
   }
 
-  // ── ANSWERED CALL ──
   if (!info?.label) {
     return <span className="cl-agent cl-agent--none">—</span>;
   }
@@ -1004,11 +1150,15 @@ const CallRoutingBadge = React.memo(({ routing }) => {
               <div className="cl-routing-step-content">
                 <span className="cl-routing-agent-name">{agent.name}</span>
                 {agent.ext ? (
-                  <span className="cl-routing-agent-num">Ext: {agent.ext}</span>
+                  <span className="cl-routing-agent-num">
+                    Ext: {agent.ext}
+                  </span>
                 ) : agent.number ? (
                   <span className="cl-routing-agent-num">{agent.number}</span>
                 ) : null}
-                <span className="cl-routing-step-status">✗ Did not answer</span>
+                <span className="cl-routing-step-status">
+                  ✗ Did not answer
+                </span>
               </div>
             </div>
           ))}
@@ -1029,14 +1179,18 @@ const CallRoutingBadge = React.memo(({ routing }) => {
                     {routing.answeredBy.number}
                   </span>
                 ) : null}
-                <span className="cl-routing-step-status">✓ Answered the call</span>
+                <span className="cl-routing-step-status">
+                  ✓ Answered the call
+                </span>
               </div>
             </div>
           ) : (
             <div className="cl-routing-step cl-routing-step--none">
               <div className="cl-routing-dot cl-routing-dot--none" />
               <div className="cl-routing-step-content">
-                <span className="cl-routing-step-status">✗ No one answered</span>
+                <span className="cl-routing-step-status">
+                  ✗ No one answered
+                </span>
               </div>
             </div>
           )}
@@ -1059,21 +1213,69 @@ const LiveTimer = ({ startedAt }) => {
   return <span className="cl-live-timer">{fmtSec(sec)}</span>;
 };
 
-// ─── RecordingPlayer ──────────────────────────────────────────────────────────
+// ─── RecordingPlayer ───────────────────────────────────────────────────────────
 const RecordingPlayer = React.memo(({ call }) => {
-  const [state, setState] = useState("idle");
+  const [playerState, setPlayerState] = useState("idle"); // idle | loading | playing | paused | error
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const audioRef = useRef(null);
 
-  const hasRec = !!(
-    call.recording_url && String(call.recording_url).startsWith("http")
-  );
+  const recordingUrl = call?.recording_url;
+  const hasRec = !!(recordingUrl && String(recordingUrl).startsWith("http"));
+
+  const callStatus = norm(call?.call_status || "");
   const isAnswered = ["answered", "completed", "connected", "called"].includes(
-    norm(call.call_status || "")
+    callStatus
   );
-  const hasDur = Number(call.billsec) > 0;
+  const billsec = Number(call?.billsec) || 0;
+  const hasDur = billsec > 0;
+
+  const handlePlay = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (playerState === "playing") {
+      audio.pause();
+      setPlayerState("paused");
+      return;
+    }
+
+    if (playerState === "paused") {
+      audio
+        .play()
+        .then(() => setPlayerState("playing"))
+        .catch(() => setPlayerState("error"));
+      return;
+    }
+
+    setPlayerState("loading");
+    audio.src = recordingUrl;
+    audio.load();
+    audio
+      .play()
+      .then(() => setPlayerState("playing"))
+      .catch(() => setPlayerState("error"));
+  }, [playerState, recordingUrl]);
+
+  const handleSeek = useCallback(
+    (e) => {
+      const audio = audioRef.current;
+      if (!audio || !duration) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const ratio = (e.clientX - rect.left) / rect.width;
+      audio.currentTime = ratio * duration;
+    },
+    [duration]
+  );
+
+  const handleVolumeChange = useCallback((e) => {
+    const v = parseFloat(e.target.value);
+    setVolume(v);
+    if (audioRef.current) audioRef.current.volume = v;
+  }, []);
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   if (!hasRec) {
     if (isAnswered && hasDur) {
@@ -1086,32 +1288,9 @@ const RecordingPlayer = React.memo(({ call }) => {
     return <span className="cl-no-rec">—</span>;
   }
 
-  const handlePlay = () => {
-    if (!audioRef.current) return;
-    if (state === "playing") {
-      audioRef.current.pause();
-      setState("paused");
-      return;
-    }
-    if (state === "paused") {
-      audioRef.current.play().catch(() => setState("error"));
-      setState("playing");
-      return;
-    }
-    setState("loading");
-    audioRef.current.src = call.recording_url;
-    audioRef.current.load();
-    audioRef.current
-      .play()
-      .then(() => setState("playing"))
-      .catch(() => setState("error"));
-  };
-
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  if (state === "error") {
+  if (playerState === "error") {
     return (
-      <a href={call.recording_url} download className="cl-rec-dl">
+      <a href={recordingUrl} download className="cl-rec-dl">
         ⬇ Download
       </a>
     );
@@ -1122,50 +1301,45 @@ const RecordingPlayer = React.memo(({ call }) => {
       <audio
         ref={audioRef}
         preload="none"
-        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+        onTimeUpdate={() =>
+          setCurrentTime(audioRef.current?.currentTime || 0)
+        }
         onLoadedMetadata={() => {
           setDuration(audioRef.current?.duration || 0);
-          setState("playing");
         }}
+        onPlaying={() => setPlayerState("playing")}
         onEnded={() => {
-          setState("idle");
+          setPlayerState("idle");
           setCurrentTime(0);
         }}
-        onError={() => setState("error")}
+        onError={() => setPlayerState("error")}
       />
 
       <button
         onClick={handlePlay}
         className={`cl-play-btn ${
-          state === "playing" ? "cl-play-btn--pause" : ""
+          playerState === "playing" ? "cl-play-btn--pause" : ""
         }`}
+        title={playerState === "playing" ? "Pause" : "Play recording"}
       >
-        {state === "loading" ? (
+        {playerState === "loading" ? (
           <span className="cl-spinner" />
-        ) : state === "playing" ? (
+        ) : playerState === "playing" ? (
           "⏸"
         ) : (
           "▶"
         )}
       </button>
 
-      <div
-        className="cl-track"
-        onClick={(e) => {
-          if (!audioRef.current || !duration) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          audioRef.current.currentTime =
-            ((e.clientX - rect.left) / rect.width) * duration;
-        }}
-      >
+      <div className="cl-track" onClick={handleSeek}>
         <div className="cl-progress" style={{ width: `${progress}%` }}>
           <span className="cl-thumb" />
         </div>
       </div>
 
       <span className="cl-time">
-        {state === "idle"
-          ? fmtDur(call.billsec)
+        {playerState === "idle"
+          ? fmtDur(billsec)
           : fmtSec(Math.floor(currentTime))}
       </span>
 
@@ -1175,20 +1349,17 @@ const RecordingPlayer = React.memo(({ call }) => {
         max="1"
         step="0.1"
         value={volume}
-        onChange={(e) => {
-          const v = parseFloat(e.target.value);
-          setVolume(v);
-          if (audioRef.current) audioRef.current.volume = v;
-        }}
+        onChange={handleVolumeChange}
         className="cl-vol"
         title="Volume"
       />
 
       <a
-        href={call.recording_url}
-        download={`rec-${call.id || call.uuid}.mp3`}
+        href={recordingUrl}
+        download={`rec-${call?.id || call?.uuid || "recording"}.mp3`}
         className="cl-dl"
         onClick={(e) => e.stopPropagation()}
+        title="Download recording"
       >
         ⬇
       </a>
@@ -1197,7 +1368,7 @@ const RecordingPlayer = React.memo(({ call }) => {
 });
 
 // ─── MiniHistory ──────────────────────────────────────────────────────────────
-const MiniHistory = ({ number, agentDirectory, nameMap }) => {
+const MiniHistory = ({ number, agentDirectory }) => {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1266,6 +1437,11 @@ const MiniHistory = ({ number, agentDirectory, nameMap }) => {
                 Agent: <strong>{agentInfo.label || "—"}</strong>
                 {agentInfo.ext ? ` (Ext: ${agentInfo.ext})` : ""}
               </div>
+              {c.recording_url?.startsWith("http") && (
+                <div style={{ marginTop: 6 }}>
+                  <RecordingPlayer call={c} />
+                </div>
+              )}
             </div>
             <div className="cl-hist-time">
               <div className="cl-hist-date" style={{ color: "#e2e8f0" }}>
@@ -1287,7 +1463,6 @@ const LiveCallModal = ({
   onEnd,
   onClose,
   agentDirectory,
-  nameMap,
 }) => {
   const [muted, setMuted] = useState(false);
   const [held, setHeld] = useState(false);
@@ -1388,14 +1563,18 @@ const LiveCallModal = ({
           <div className="cl-live-body">
             <div className="cl-live-controls">
               <button
-                className={`cl-live-ctrl-btn ${muted ? "cl-live-ctrl-btn--active" : ""}`}
+                className={`cl-live-ctrl-btn ${
+                  muted ? "cl-live-ctrl-btn--active" : ""
+                }`}
                 onClick={() => setMuted((m) => !m)}
               >
                 <span className="cl-live-ctrl-icon">{muted ? "🔇" : "🎙"}</span>
                 <span>{muted ? "Unmute" : "Mute"}</span>
               </button>
               <button
-                className={`cl-live-ctrl-btn ${held ? "cl-live-ctrl-btn--active" : ""}`}
+                className={`cl-live-ctrl-btn ${
+                  held ? "cl-live-ctrl-btn--active" : ""
+                }`}
                 onClick={() => setHeld((h) => !h)}
               >
                 <span className="cl-live-ctrl-icon">{held ? "▶" : "⏸"}</span>
@@ -1430,7 +1609,11 @@ const LiveCallModal = ({
                     }`}
                     style={
                       outcome === o.v
-                        ? { background: o.color, color: "#fff", borderColor: o.color }
+                        ? {
+                            background: o.color,
+                            color: "#fff",
+                            borderColor: o.color,
+                          }
                         : { borderColor: `${o.color}60`, color: o.color }
                     }
                     onClick={() => setOutcome(outcome === o.v ? "" : o.v)}
@@ -1499,11 +1682,7 @@ const LiveCallModal = ({
 
         {tab === "history" && (
           <div className="cl-live-body">
-            <MiniHistory
-              number={num}
-              agentDirectory={agentDirectory}
-              nameMap={nameMap}
-            />
+            <MiniHistory number={num} agentDirectory={agentDirectory} />
             <button
               className="cl-btn-end-call"
               style={{ marginTop: 16 }}
@@ -1640,8 +1819,113 @@ const RemarkModal = ({ data, onClose, onSave }) => {
   );
 };
 
+// ─── TagModal ─────────────────────────────────────────────────────────────────
+const TagModal = ({ data, onClose, onSave }) => {
+  const [tags, setTagsLocal] = useState(data?.currentTags || []);
+  const [input, setInput] = useState("");
+  const ref = useRef();
+
+  useEffect(() => {
+    setTimeout(() => ref.current?.focus(), 80);
+  }, []);
+
+  const addTag = () => {
+    const t = input.trim();
+    if (!t) return;
+    if (!tags.includes(t)) setTagsLocal([...tags, t]);
+    setInput("");
+  };
+
+  const removeTag = (t) => setTagsLocal(tags.filter((x) => x !== t));
+
+  return (
+    <div
+      className="cl-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="cl-modal cl-modal--sm">
+        <div className="cl-modal-header">
+          <div className="cl-modal-icon">🏷️</div>
+          <div>
+            <h3 className="cl-modal-title">Manage Tags</h3>
+            <p className="cl-modal-sub">
+              {data?.count > 1
+                ? `${data.count} calls selected`
+                : data?.name || data?.number}
+            </p>
+          </div>
+          <button className="cl-modal-close" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <div className="cl-modal-body">
+          <div className="cl-tag-chips-edit">
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="cl-tag-chip"
+                style={{
+                  background: `${tagColor(t)}14`,
+                  color: tagColor(t),
+                  borderColor: `${tagColor(t)}40`,
+                }}
+              >
+                {t}
+                <button
+                  className="cl-tag-chip-x"
+                  onClick={() => removeTag(t)}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            {!tags.length && (
+              <span className="cl-tag-empty-hint">No tags yet</span>
+            )}
+          </div>
+
+          <div className="cl-form-group" style={{ marginTop: 14 }}>
+            <label className="cl-label">Add Tag</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                ref={ref}
+                className="cl-input"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && (e.preventDefault(), addTag())
+                }
+                placeholder="e.g. VIP, Hot Lead, Priority"
+              />
+              <button className="cl-btn cl-btn--outline" onClick={addTag}>
+                Add
+              </button>
+            </div>
+          </div>
+
+          <div className="cl-modal-actions">
+            <button className="cl-btn cl-btn--ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className="cl-btn cl-btn--primary"
+              onClick={() => {
+                onSave(tags);
+                onClose();
+              }}
+            >
+              💾 Save Tags
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── HistoryModal ─────────────────────────────────────────────────────────────
-const HistoryModal = ({ number, name, onClose, agentDirectory, nameMap }) => {
+const HistoryModal = ({ number, name, onClose, agentDirectory }) => {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -1726,7 +2010,9 @@ const HistoryModal = ({ number, name, onClose, agentDirectory, nameMap }) => {
             return (
               <div
                 key={c.id || c.uuid || i}
-                className={`cl-hist-item ${isMissed ? "cl-hist-item--missed" : ""}`}
+                className={`cl-hist-item ${
+                  isMissed ? "cl-hist-item--missed" : ""
+                }`}
               >
                 <div className="cl-hist-icon">{isMissed ? "📵" : "📞"}</div>
                 <div className="cl-hist-content">
@@ -1744,11 +2030,9 @@ const HistoryModal = ({ number, name, onClose, agentDirectory, nameMap }) => {
                     Agent: <strong>{agentInfo.label || "—"}</strong>
                     {agentInfo.ext ? ` (Ext: ${agentInfo.ext})` : ""}
                   </div>
-                  {c.recording_url?.startsWith("http") && (
-                    <div style={{ marginTop: 6 }}>
-                      <RecordingPlayer call={c} />
-                    </div>
-                  )}
+                  <div style={{ marginTop: 6 }}>
+                    <RecordingPlayer call={c} />
+                  </div>
                 </div>
                 <div className="cl-hist-time">
                   <div className="cl-hist-date">{date}</div>
@@ -1771,10 +2055,18 @@ const DeleteModal = ({ data, onClose, onConfirm }) => (
   >
     <div className="cl-modal cl-modal--sm cl-modal--delete">
       <div className="cl-delete-icon">🗑️</div>
-      <h3 className="cl-modal-title">Delete Record?</h3>
+      <h3 className="cl-modal-title" style={{ textAlign: "center" }}>
+        {data.count > 1 ? `Delete ${data.count} records?` : "Delete Record?"}
+      </h3>
       <p className="cl-modal-sub" style={{ textAlign: "center" }}>
-        This will permanently delete the record for{" "}
-        <strong>{data.name || data.number}</strong>.
+        {data.count > 1 ? (
+          <>This will permanently delete {data.count} selected records.</>
+        ) : (
+          <>
+            This will permanently delete the record for{" "}
+            <strong>{data.name || data.number}</strong>.
+          </>
+        )}
       </p>
       <div className="cl-modal-actions" style={{ justifyContent: "center" }}>
         <button className="cl-btn cl-btn--ghost" onClick={onClose}>
@@ -1783,7 +2075,7 @@ const DeleteModal = ({ data, onClose, onConfirm }) => (
         <button
           className="cl-btn cl-btn--danger"
           onClick={() => {
-            onConfirm(data.id);
+            onConfirm(data.id || data.ids);
             onClose();
           }}
         >
@@ -2026,6 +2318,163 @@ const ExportModal = ({ agents, onClose }) => {
   );
 };
 
+// ─── ColumnMenu ───────────────────────────────────────────────────────────────
+const COLUMN_LABELS = {
+  type: "Type",
+  datetime: "Date & Time",
+  status: "Status",
+  agent: "Agent",
+  duration: "Duration",
+  recording: "Recording",
+  tags: "Tags",
+};
+
+const ColumnMenu = ({ visibleCols, onToggle, onClose }) => {
+  const ref = useRef();
+  useEffect(() => {
+    const h = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [onClose]);
+
+  return (
+    <div className="cl-popover" ref={ref}>
+      <div className="cl-popover-title">Toggle Columns</div>
+      {Object.keys(COLUMN_LABELS).map((k) => (
+        <label key={k} className="cl-popover-item">
+          <input
+            type="checkbox"
+            checked={!!visibleCols[k]}
+            onChange={() => onToggle(k)}
+          />
+          <span>{COLUMN_LABELS[k]}</span>
+        </label>
+      ))}
+    </div>
+  );
+};
+
+// ─── ViewsMenu ────────────────────────────────────────────────────────────────
+const ViewsMenu = ({ views, onLoad, onDelete, onSaveCurrent, onClose }) => {
+  const ref = useRef();
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    const h = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [onClose]);
+
+  return (
+    <div className="cl-popover cl-popover--wide" ref={ref}>
+      <div className="cl-popover-title">Saved Views</div>
+      {!views.length && (
+        <div className="cl-popover-empty">No saved views yet</div>
+      )}
+      {views.map((v) => (
+        <div key={v.id} className="cl-view-item">
+          <button className="cl-view-load" onClick={() => onLoad(v)}>
+            🔖 {v.name}
+          </button>
+          <button
+            className="cl-view-del"
+            onClick={() => onDelete(v.id)}
+            title="Delete view"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <div className="cl-view-save-row">
+        <input
+          className="cl-input cl-input--sm"
+          placeholder="View name..."
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && name.trim()) {
+              onSaveCurrent(name.trim());
+              setName("");
+            }
+          }}
+        />
+        <button
+          className="cl-btn cl-btn--outline cl-btn--sm"
+          onClick={() => {
+            if (name.trim()) {
+              onSaveCurrent(name.trim());
+              setName("");
+            }
+          }}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── ToastStack ───────────────────────────────────────────────────────────────
+const ToastStack = ({ toasts, onDismiss }) => (
+  <div className="cl-toast-stack">
+    {toasts.map((t) => (
+      <div
+        key={t.id}
+        className={`cl-toast ${t.ok ? "cl-toast--ok" : "cl-toast--err"}`}
+        onClick={() => onDismiss(t.id)}
+      >
+        <span className="cl-toast-icon">{t.ok ? "✓" : "!"}</span>
+        <span>{t.msg}</span>
+      </div>
+    ))}
+  </div>
+);
+
+// ─── SkeletonRows ─────────────────────────────────────────────────────────────
+const SkeletonRows = ({ colSpan, rows = 8 }) => (
+  <>
+    {Array.from({ length: rows }).map((_, i) => (
+      <tr key={i} className="cl-skeleton-row">
+        <td colSpan={colSpan} className="cl-td">
+          <div
+            className="cl-skeleton-line"
+            style={{ width: `${58 + ((i * 7) % 30)}%` }}
+          />
+        </td>
+      </tr>
+    ))}
+  </>
+);
+
+// ─── TagChips (row display) ───────────────────────────────────────────────────
+const TagChips = React.memo(({ tags = [], onAdd }) => (
+  <div className="cl-tag-chips">
+    {tags.slice(0, 3).map((t) => (
+      <span
+        key={t}
+        className="cl-tag-chip cl-tag-chip--sm"
+        style={{
+          background: `${tagColor(t)}14`,
+          color: tagColor(t),
+          borderColor: `${tagColor(t)}40`,
+        }}
+      >
+        {t}
+      </span>
+    ))}
+    {tags.length > 3 && (
+      <span className="cl-tag-more">+{tags.length - 3}</span>
+    )}
+    <button className="cl-tag-add" onClick={onAdd} title="Manage tags">
+      {tags.length ? "✎" : "+ Tag"}
+    </button>
+  </div>
+));
+
 // ─── CallRow ──────────────────────────────────────────────────────────────────
 const CallRow = React.memo(
   ({
@@ -2040,7 +2489,13 @@ const CallRow = React.memo(
     onDelete,
     onEditName,
     onOpenLive,
+    onTag,
+    onCopy,
     nameMap,
+    tags,
+    visibleCols,
+    selected,
+    onToggleSelect,
   }) => {
     const dir = norm(c.direction);
 
@@ -2076,8 +2531,17 @@ const CallRow = React.memo(
       <tr
         className={`cl-row ${isActive ? "cl-row--active" : ""} ${
           isMissed ? "cl-row--missed" : ""
-        }`}
+        } ${selected ? "cl-row--selected" : ""}`}
       >
+        <td className="cl-td cl-td--check">
+          <input
+            type="checkbox"
+            className="cl-row-check"
+            checked={selected}
+            onChange={() => onToggleSelect(key)}
+          />
+        </td>
+
         <td className="cl-td">
           <div className="cl-customer">
             <div
@@ -2102,7 +2566,16 @@ const CallRow = React.memo(
                 {displayName || c.name || num}
               </button>
               {(displayName || c.name) && (
-                <div className="cl-mono cl-xs">{num}</div>
+                <div className="cl-mono cl-xs cl-num-row">
+                  {num}
+                  <button
+                    className="cl-copy-btn"
+                    title="Copy number"
+                    onClick={() => onCopy(num)}
+                  >
+                    ⧉
+                  </button>
+                </div>
               )}
             </div>
 
@@ -2122,42 +2595,70 @@ const CallRow = React.memo(
           </div>
         </td>
 
-        <td className="cl-td">
-          <Badge direction={c.direction} />
-        </td>
+        {visibleCols.type && (
+          <td className="cl-td">
+            <Badge direction={c.direction} />
+          </td>
+        )}
 
-        <td className="cl-td">
-          <div className="cl-datetime">
-            <span className="cl-date">{date}</span>
-            <span className="cl-mono cl-xs">{time}</span>
-          </div>
-        </td>
+        {visibleCols.datetime && (
+          <td className="cl-td">
+            <div className="cl-datetime">
+              <span className="cl-date">{date}</span>
+              <span className="cl-mono cl-xs">{time}</span>
+            </div>
+          </td>
+        )}
 
-        <td className="cl-td">
-          <div className="cl-status-cell">
-            <Badge status={c.call_status} />
-            {c._remark && (
-              <div className="cl-remark-tag">
-                📝 {c._remark.slice(0, 30)}
-                {c._remark.length > 30 ? "..." : ""}
-              </div>
-            )}
-            {c._outcome && <Badge outcome={c._outcome} />}
-            <CallRoutingBadge routing={routing} />
-          </div>
-        </td>
+        {visibleCols.status && (
+          <td className="cl-td">
+            <div className="cl-status-cell">
+              <Badge status={c.call_status} />
+              {c._remark && (
+                <div className="cl-remark-tag">
+                  📝 {c._remark.slice(0, 30)}
+                  {c._remark.length > 30 ? "..." : ""}
+                </div>
+              )}
+              {c._outcome && <Badge outcome={c._outcome} />}
+              <CallRoutingBadge routing={routing} />
+            </div>
+          </td>
+        )}
 
-        <td className="cl-td">
-          <AgentDisplay call={c} agentDirectory={agentDirectory} />
-        </td>
+        {visibleCols.agent && (
+          <td className="cl-td">
+            <AgentDisplay call={c} agentDirectory={agentDirectory} />
+          </td>
+        )}
 
-        <td className="cl-td">
-          <span className="cl-duration">{fmtDur(c.billsec)}</span>
-        </td>
+        {visibleCols.duration && (
+          <td className="cl-td">
+            <span className="cl-duration">{fmtDur(c.billsec)}</span>
+          </td>
+        )}
 
-        <td className="cl-td">
-          <RecordingPlayer call={c} />
-        </td>
+        {visibleCols.recording && (
+          <td className="cl-td">
+            <RecordingPlayer call={c} />
+          </td>
+        )}
+
+        {visibleCols.tags && (
+          <td className="cl-td">
+            <TagChips
+              tags={tags}
+              onAdd={() =>
+                onTag({
+                  ids: [key],
+                  currentTags: tags,
+                  name: displayName || c.name,
+                  number: num,
+                })
+              }
+            />
+          </td>
+        )}
 
         <td className="cl-td">
           <div className="cl-actions">
@@ -2175,7 +2676,9 @@ const CallRow = React.memo(
               <button
                 onClick={() => onCall(c)}
                 disabled={isCalling || !!activeCall}
-                className={`cl-btn-call ${isCalling ? "cl-btn-call--busy" : ""}`}
+                className={`cl-btn-call ${
+                  isCalling ? "cl-btn-call--busy" : ""
+                }`}
                 title={
                   activeCall && !isActive
                     ? "Another call is active"
@@ -2255,6 +2758,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
   const [fStatus, setFStatus] = useState("");
   const [fAgent, setFAgent] = useState("");
   const [fDate, setFDate] = useState("");
+  const [fTag, setFTag] = useState("");
   const [sortKey, setSortKey] = useState("createdAt");
   const [sortDir, setSortDir] = useState(-1);
   const [activeCall, setActiveCall] = useState(null);
@@ -2264,23 +2768,69 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
   const [deleteModal, setDeleteModal] = useState(null);
   const [editNameModal, setEditNameModal] = useState(null);
   const [exportModal, setExportModal] = useState(false);
+  const [tagModal, setTagModal] = useState(null);
   const [liveCallModal, setLiveCallModal] = useState(null);
-  const [toast, setToast] = useState({ show: false, msg: "", ok: true });
+  const [toasts, setToasts] = useState([]);
   const [nameMap, setNameMap] = useState(() => getNameMap());
+  const [tagsMap, setTagsMapState] = useState(() => getTagsMap());
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [visibleCols, setVisibleCols] = useState(() => getSavedCols());
+  const [density, setDensity] = useState(() => getSavedDensity());
+  const [columnMenuOpen, setColumnMenuOpen] = useState(false);
+  const [viewsMenuOpen, setViewsMenuOpen] = useState(false);
+  const [savedViews, setSavedViewsState] = useState(() => getSavedViews());
 
-  const toastT = useRef();
+  const toastTimers = useRef({});
   const hasFetched = useRef(false);
   const autoRefreshRef = useRef(null);
+  const searchRef = useRef(null);
 
   const agentDirectory = useMemo(() => buildAgentDirectory(agents), [agents]);
 
+  // ── Toasts ───────────────────────────────────────────────────────────────
   const showToast = useCallback((msg, ok = true) => {
-    setToast({ show: true, msg, ok });
-    clearTimeout(toastT.current);
-    toastT.current = setTimeout(
-      () => setToast((t) => ({ ...t, show: false })),
-      3500
-    );
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((t) => [...t, { id, msg, ok }]);
+    toastTimers.current[id] = setTimeout(() => {
+      setToasts((t) => t.filter((x) => x.id !== id));
+      delete toastTimers.current[id];
+    }, TOAST_TTL);
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts((t) => t.filter((x) => x.id !== id));
+    clearTimeout(toastTimers.current[id]);
+    delete toastTimers.current[id];
+  }, []);
+
+  useEffect(() => {
+    const timers = toastTimers.current;
+    return () => Object.values(timers).forEach(clearTimeout);
+  }, []);
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      const tagName = document.activeElement?.tagName;
+      const typing =
+        tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+
+      if (e.key === "/" && !typing) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      } else if (e.key === "Escape") {
+        setRemarkModal(null);
+        setHistoryModal(null);
+        setDeleteModal(null);
+        setEditNameModal(null);
+        setExportModal(false);
+        setTagModal(null);
+        setColumnMenuOpen(false);
+        setViewsMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
 
   // ── Fetch ────────────────────────────────────────────────────────────────
@@ -2370,7 +2920,11 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
 
   const handleServerPageChange = useCallback(
     (newPage) => {
-      if (newPage < 1 || newPage > totalServerPages || newPage === serverPage) {
+      if (
+        newPage < 1 ||
+        newPage > totalServerPages ||
+        newPage === serverPage
+      ) {
         return;
       }
       fetchCalls(true, newPage);
@@ -2388,6 +2942,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
       r = r.filter((c) => {
         const info = resolveAgentInfo(c, agentDirectory);
         const resolvedName = resolveDisplayName(c) || "";
+        const rowTags = tagsMap[c.id || c.uuid] || [];
         return [
           c.call_to_number,
           c.caller_id_number,
@@ -2403,12 +2958,14 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           info.ext,
           c.id,
           c.uuid,
+          ...rowTags,
         ].some((v) => v && String(v).toLowerCase().includes(q));
       });
     }
 
     if (fDir) r = r.filter((c) => norm(c.direction) === norm(fDir));
-    if (fStatus) r = r.filter((c) => norm(c.call_status) === norm(fStatus));
+    if (fStatus)
+      r = r.filter((c) => norm(c.call_status) === norm(fStatus));
 
     if (fAgent) {
       r = r.filter((c) => {
@@ -2426,6 +2983,10 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
         const ts = safeTs(c);
         return ts && new Date(ts).toISOString().slice(0, 10) === fDate;
       });
+    }
+
+    if (fTag) {
+      r = r.filter((c) => (tagsMap[c.id || c.uuid] || []).includes(fTag));
     }
 
     return [...r].sort((a, b) => {
@@ -2454,28 +3015,43 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
     fStatus,
     fAgent,
     fDate,
+    fTag,
     sortKey,
     sortDir,
     agentDirectory,
     nameMap,
+    tagsMap,
   ]);
 
   useEffect(() => {
     setDisplayPage(1);
-  }, [search, fDir, fStatus, fAgent, fDate, sortKey, sortDir]);
+  }, [search, fDir, fStatus, fAgent, fDate, fTag, sortKey, sortDir]);
 
   const stats = useMemo(() => {
     const answered = filteredCalls.filter((c) =>
       ["answered", "completed", "connected"].includes(norm(c.call_status))
     ).length;
     const missed = filteredCalls.filter((c) =>
-      ["missed", "no_answer", "no-answer", "failed"].includes(norm(c.call_status))
+      ["missed", "no_answer", "no-answer", "failed"].includes(
+        norm(c.call_status)
+      )
     ).length;
     const totalDuration = filteredCalls.reduce(
       (s, c) => s + (Number(c.billsec) || 0),
       0
     );
-    return { answered, missed, totalDuration };
+    const answeredCount = filteredCalls.filter((c) =>
+      ["answered", "completed", "connected", "called"].includes(
+        norm(c.call_status)
+      )
+    ).length;
+    const avgDuration =
+      answeredCount > 0 ? Math.round(totalDuration / answeredCount) : 0;
+    const answerRate =
+      filteredCalls.length > 0
+        ? Math.round((answered / filteredCalls.length) * 100)
+        : 0;
+    return { answered, missed, totalDuration, avgDuration, answerRate };
   }, [filteredCalls]);
 
   const uniqueAgents = useMemo(() => {
@@ -2497,6 +3073,14 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [allCalls, agents, agentDirectory]);
 
+  const uniqueTags = useMemo(() => {
+    const set = new Set();
+    Object.values(tagsMap).forEach((arr) =>
+      (arr || []).forEach((t) => set.add(t))
+    );
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [tagsMap]);
+
   const displayPaged = useMemo(
     () =>
       filteredCalls.slice(
@@ -2507,6 +3091,14 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
   );
 
   const displayPages = Math.ceil(filteredCalls.length / DISPLAY_SIZE);
+
+  const visibleColumnCount = useMemo(() => {
+    let n = 3; // checkbox + customer + actions
+    Object.keys(DEFAULT_COLS).forEach((k) => {
+      if (visibleCols[k]) n += 1;
+    });
+    return n;
+  }, [visibleCols]);
 
   const handleSort = useCallback((k) => {
     setSortKey((prev) => {
@@ -2544,7 +3136,12 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
       const dir = norm(c.direction);
       const num =
         dir === "inbound"
-          ? (c.client_number || c.caller_id_number || c.call_to_number || "")
+          ? (
+              c.client_number ||
+              c.caller_id_number ||
+              c.call_to_number ||
+              ""
+            )
               .replace(/^\+91/, "")
               .trim()
           : (c.call_to_number || c.client_number || "")
@@ -2595,7 +3192,10 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
   const handleEnd = useCallback(
     (c) => {
       const num =
-        c?.call_to_number || c?.caller_id_number || activeCall?.number || "";
+        c?.call_to_number ||
+        c?.caller_id_number ||
+        activeCall?.number ||
+        "";
       const key = c?.id || c?.uuid || num;
       setActiveCall(null);
       setLiveCallModal(null);
@@ -2611,15 +3211,25 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
   );
 
   const handleDelete = useCallback(
-    async (id) => {
+    async (idOrIds) => {
+      const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
       try {
-        await apiFetch(`/call-logs/${id}`, { method: "DELETE" });
+        await Promise.all(
+          ids.map((id) => apiFetch(`/call-logs/${id}`, { method: "DELETE" }))
+        );
       } catch (e) {
         console.error("Delete failed:", e);
       }
-      updateLocalAndCache((prev) => prev.filter((c) => c.id !== id));
+      updateLocalAndCache((prev) => prev.filter((c) => !ids.includes(c.id)));
       invalidateCache();
-      showToast("Record deleted");
+      setSelectedIds((prev) => {
+        const n = new Set(prev);
+        ids.forEach((id) => n.delete(id));
+        return n;
+      });
+      showToast(
+        ids.length > 1 ? `🗑️ ${ids.length} records deleted` : "Record deleted"
+      );
     },
     [showToast, updateLocalAndCache]
   );
@@ -2674,11 +3284,177 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
     [showToast, updateLocalAndCache]
   );
 
-  const handleOpenLive = useCallback((payload) => setLiveCallModal(payload), []);
+  // ── Tags ─────────────────────────────────────────────────────────────────
+  const handleTagSave = useCallback(
+    (newTags) => {
+      if (!tagModal) return;
+      const map = getTagsMap();
+      tagModal.ids.forEach((id) => {
+        if (newTags.length) map[id] = newTags;
+        else delete map[id];
+      });
+      setTagsMapStorage(map);
+      setTagsMapState({ ...map });
+      showToast(
+        tagModal.ids.length > 1
+          ? `🏷️ Tags updated for ${tagModal.ids.length} calls`
+          : "🏷️ Tags updated"
+      );
+    },
+    [tagModal, showToast]
+  );
+
+  // ── Selection ────────────────────────────────────────────────────────────
+  const toggleSelect = useCallback((key) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(key)) n.delete(key);
+      else n.add(key);
+      return n;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const pageKeys = displayPaged.map((c) => c.id || c.uuid);
+      const allSelected = pageKeys.every((k) => prev.has(k));
+      if (allSelected) {
+        const n = new Set(prev);
+        pageKeys.forEach((k) => n.delete(k));
+        return n;
+      }
+      return new Set([...prev, ...pageKeys]);
+    });
+  }, [displayPaged]);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const selectedCalls = useMemo(
+    () => allCalls.filter((c) => selectedIds.has(c.id || c.uuid)),
+    [allCalls, selectedIds]
+  );
+
+  const allPageSelected =
+    displayPaged.length > 0 &&
+    displayPaged.every((c) => selectedIds.has(c.id || c.uuid));
+
+  // ── Copy ─────────────────────────────────────────────────────────────────
+  const handleCopy = useCallback(
+    (num) => {
+      if (!num) return;
+      navigator.clipboard
+        ?.writeText(num)
+        .then(() => showToast("📋 Number copied"))
+        .catch(() => showToast("Copy failed", false));
+    },
+    [showToast]
+  );
+
+  // ── Columns / Density ────────────────────────────────────────────────────
+  const handleColumnToggle = useCallback((key) => {
+    setVisibleCols((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      setSavedCols(next);
+      return next;
+    });
+  }, []);
+
+  const handleDensityToggle = useCallback(() => {
+    setDensity((prev) => {
+      const next = prev === "compact" ? "comfortable" : "compact";
+      try {
+        localStorage.setItem(DENSITY_KEY, next);
+      } catch (e) {}
+      return next;
+    });
+  }, []);
+
+  // ── Saved Views ──────────────────────────────────────────────────────────
+  const handleSaveView = useCallback(
+    (name) => {
+      const view = {
+        id: `${Date.now()}`,
+        name,
+        filters: { fDir, fStatus, fAgent, fDate, fTag, search: searchRaw },
+      };
+      const next = [...savedViews, view];
+      setSavedViewsStorage(next);
+      setSavedViewsState(next);
+      showToast(`🔖 View "${name}" saved`);
+    },
+    [savedViews, fDir, fStatus, fAgent, fDate, fTag, searchRaw, showToast]
+  );
+
+  const handleLoadView = useCallback(
+    (view) => {
+      const f = view.filters || {};
+      setFDir(f.fDir || "");
+      setFStatus(f.fStatus || "");
+      setFAgent(f.fAgent || "");
+      setFDate(f.fDate || "");
+      setFTag(f.fTag || "");
+      setSearchRaw(f.search || "");
+      setViewsMenuOpen(false);
+      showToast(`🔖 Loaded "${view.name}"`);
+    },
+    [showToast]
+  );
+
+  const handleDeleteView = useCallback(
+    (id) => {
+      const next = savedViews.filter((v) => v.id !== id);
+      setSavedViewsStorage(next);
+      setSavedViewsState(next);
+    },
+    [savedViews]
+  );
+
+  // ── Bulk actions ─────────────────────────────────────────────────────────
+  const handleBulkDelete = useCallback(() => {
+    setDeleteModal({
+      ids: [...selectedIds],
+      count: selectedIds.size,
+    });
+  }, [selectedIds]);
+
+  const handleBulkExport = useCallback(() => {
+    exportCSV(
+      selectedCalls,
+      agentDirectory,
+      tagsMap,
+      `call-logs-selected-${new Date().toISOString().slice(0, 10)}.csv`
+    );
+    showToast(`⬇️ Exported ${selectedCalls.length} calls to CSV`);
+  }, [selectedCalls, agentDirectory, tagsMap, showToast]);
+
+  const handleBulkTag = useCallback(() => {
+    setTagModal({
+      ids: [...selectedIds],
+      count: selectedIds.size,
+      currentTags: [],
+    });
+  }, [selectedIds]);
+
+  const handleExportAllCSV = useCallback(() => {
+    exportCSV(filteredCalls, agentDirectory, tagsMap);
+    showToast(`⬇️ Exported ${filteredCalls.length} calls to CSV`);
+  }, [filteredCalls, agentDirectory, tagsMap, showToast]);
+
+  const handleOpenLive = useCallback(
+    (payload) => setLiveCallModal(payload),
+    []
+  );
   const handleOpenRemark = useCallback((data) => setRemarkModal(data), []);
-  const handleOpenHistory = useCallback((data) => setHistoryModal(data), []);
+  const handleOpenHistory = useCallback(
+    (data) => setHistoryModal(data),
+    []
+  );
   const handleOpenDelete = useCallback((data) => setDeleteModal(data), []);
-  const handleOpenEditName = useCallback((data) => setEditNameModal(data), []);
+  const handleOpenEditName = useCallback(
+    (data) => setEditNameModal(data),
+    []
+  );
+  const handleOpenTag = useCallback((data) => setTagModal(data), []);
 
   const TH = useCallback(
     ({ k, children }) => (
@@ -2702,13 +3478,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
 
   return (
     <div className="cl-root">
-      {toast.show && (
-        <div
-          className={`cl-toast ${toast.ok ? "cl-toast--ok" : "cl-toast--err"}`}
-        >
-          {toast.msg}
-        </div>
-      )}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* Header */}
       <div className="cl-header">
@@ -2730,6 +3500,12 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
             <span className="cl-sum-badge cl-sum-badge--info">
               ⏱ {fmtDur(stats.totalDuration)}
             </span>
+            <span className="cl-sum-badge cl-sum-badge--muted">
+              Ø {fmtDur(stats.avgDuration)} avg
+            </span>
+            <span className="cl-sum-badge cl-sum-badge--accent">
+              {stats.answerRate}% answer rate
+            </span>
           </div>
         </div>
 
@@ -2739,12 +3515,72 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
               {cacheInfo.fromCache ? "📦 Cached" : "🌐 Live"} · {cacheAgeStr}
             </span>
           )}
+
+          <button
+            onClick={handleDensityToggle}
+            className="cl-btn cl-btn--outline cl-btn--icon"
+            title={density === "compact" ? "Comfortable view" : "Compact view"}
+          >
+            {density === "compact" ? "☰" : "≣"}
+          </button>
+
+          <div className="cl-popover-wrap">
+            <button
+              onClick={() => {
+                setColumnMenuOpen((p) => !p);
+                setViewsMenuOpen(false);
+              }}
+              className="cl-btn cl-btn--outline cl-btn--icon"
+              title="Toggle columns"
+            >
+              ⚙
+            </button>
+            {columnMenuOpen && (
+              <ColumnMenu
+                visibleCols={visibleCols}
+                onToggle={handleColumnToggle}
+                onClose={() => setColumnMenuOpen(false)}
+              />
+            )}
+          </div>
+
+          <div className="cl-popover-wrap">
+            <button
+              onClick={() => {
+                setViewsMenuOpen((p) => !p);
+                setColumnMenuOpen(false);
+              }}
+              className="cl-btn cl-btn--outline"
+              title="Saved views"
+            >
+              🔖 Views
+            </button>
+            {viewsMenuOpen && (
+              <ViewsMenu
+                views={savedViews}
+                onLoad={handleLoadView}
+                onDelete={handleDeleteView}
+                onSaveCurrent={handleSaveView}
+                onClose={() => setViewsMenuOpen(false)}
+              />
+            )}
+          </div>
+
+          <button
+            onClick={handleExportAllCSV}
+            className="cl-btn cl-btn--outline"
+            title="Export visible results as CSV"
+          >
+            ⬇ CSV
+          </button>
+
           <button
             onClick={() => setExportModal(true)}
             className="cl-btn cl-btn--outline"
           >
             📥 Export
           </button>
+
           <button
             onClick={() => {
               invalidateCache();
@@ -2764,7 +3600,8 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
         <div className="cl-search-wrap">
           <span className="cl-search-icon">🔍</span>
           <input
-            placeholder="Search by name, number, agent..."
+            ref={searchRef}
+            placeholder="Search by name, number, agent, tag... (press /)"
             value={searchRaw}
             onChange={(e) => setSearchRaw(e.target.value)}
             className="cl-search"
@@ -2816,6 +3653,21 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           ))}
         </select>
 
+        {uniqueTags.length > 0 && (
+          <select
+            className="cl-filter-sel"
+            value={fTag}
+            onChange={(e) => setFTag(e.target.value)}
+          >
+            <option value="">All Tags</option>
+            {uniqueTags.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        )}
+
         <input
           type="date"
           className="cl-filter-sel"
@@ -2823,7 +3675,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           onChange={(e) => setFDate(e.target.value)}
         />
 
-        {(fDir || fStatus || fAgent || fDate || searchRaw) && (
+        {(fDir || fStatus || fAgent || fDate || fTag || searchRaw) && (
           <button
             className="cl-btn cl-btn--ghost cl-btn--sm"
             onClick={() => {
@@ -2831,6 +3683,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
               setFStatus("");
               setFAgent("");
               setFDate("");
+              setFTag("");
               setSearchRaw("");
             }}
           >
@@ -2838,6 +3691,30 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           </button>
         )}
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="cl-bulk-bar">
+          <span className="cl-bulk-count">
+            ✅ {selectedIds.size} selected
+          </span>
+          <button className="cl-bar-btn" onClick={handleBulkTag}>
+            🏷️ Tag
+          </button>
+          <button className="cl-bar-btn" onClick={handleBulkExport}>
+            ⬇ Export CSV
+          </button>
+          <button
+            className="cl-bar-btn cl-bar-btn--end"
+            onClick={handleBulkDelete}
+          >
+            🗑 Delete
+          </button>
+          <button className="cl-bar-btn" onClick={clearSelection}>
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Active Call Bar */}
       {activeCall && (
@@ -2899,32 +3776,46 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
 
       {/* Table */}
       <div className="cl-table-wrap">
-        <table className="cl-table">
+        <table
+          className={`cl-table ${
+            density === "compact" ? "cl-table--compact" : ""
+          }`}
+        >
           <thead>
             <tr>
+              <th className="cl-th cl-th--check">
+                <input
+                  type="checkbox"
+                  className="cl-row-check"
+                  checked={allPageSelected}
+                  onChange={toggleSelectAll}
+                  title="Select all on this page"
+                />
+              </th>
               <TH k="call_to_number">CUSTOMER</TH>
-              <TH k="direction">TYPE</TH>
-              <TH k="createdAt">DATE & TIME</TH>
-              <TH k="call_status">STATUS</TH>
-              <TH k="answered_agent_name">AGENT</TH>
-              <TH k="billsec">DURATION</TH>
-              <th className="cl-th">RECORDING</th>
+              {visibleCols.type && <TH k="direction">TYPE</TH>}
+              {visibleCols.datetime && <TH k="createdAt">DATE & TIME</TH>}
+              {visibleCols.status && <TH k="call_status">STATUS</TH>}
+              {visibleCols.agent && (
+                <TH k="answered_agent_name">AGENT</TH>
+              )}
+              {visibleCols.duration && <TH k="billsec">DURATION</TH>}
+              {visibleCols.recording && (
+                <th className="cl-th">RECORDING</th>
+              )}
+              {visibleCols.tags && <th className="cl-th">TAGS</th>}
               <th className="cl-th">ACTIONS</th>
             </tr>
           </thead>
 
           <tbody>
             {loading && (
-              <tr>
-                <td colSpan={8} className="cl-table-empty">
-                  <span className="cl-spinner cl-spinner--blue" /> Loading...
-                </td>
-              </tr>
+              <SkeletonRows colSpan={visibleColumnCount} rows={8} />
             )}
 
             {!loading && !displayPaged.length && (
               <tr>
-                <td colSpan={8} className="cl-table-empty">
+                <td colSpan={visibleColumnCount} className="cl-table-empty">
                   <div className="cl-empty-state">
                     <span className="cl-empty-icon">📭</span>
                     <p>No calls found</p>
@@ -2936,23 +3827,33 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
               </tr>
             )}
 
-            {displayPaged.map((c, i) => (
-              <CallRow
-                key={c.id || c.uuid || i}
-                c={c}
-                allCalls={allCalls}
-                agentDirectory={agentDirectory}
-                activeCall={activeCall}
-                callingRows={callingRows}
-                onCall={handleCall}
-                onRemark={handleOpenRemark}
-                onHistory={handleOpenHistory}
-                onDelete={handleOpenDelete}
-                onEditName={handleOpenEditName}
-                onOpenLive={handleOpenLive}
-                nameMap={nameMap}
-              />
-            ))}
+            {!loading &&
+              displayPaged.map((c, i) => {
+                const key = c.id || c.uuid || i;
+                return (
+                  <CallRow
+                    key={key}
+                    c={c}
+                    allCalls={allCalls}
+                    agentDirectory={agentDirectory}
+                    activeCall={activeCall}
+                    callingRows={callingRows}
+                    onCall={handleCall}
+                    onRemark={handleOpenRemark}
+                    onHistory={handleOpenHistory}
+                    onDelete={handleOpenDelete}
+                    onEditName={handleOpenEditName}
+                    onOpenLive={handleOpenLive}
+                    onTag={handleOpenTag}
+                    onCopy={handleCopy}
+                    nameMap={nameMap}
+                    tags={tagsMap[c.id || c.uuid] || []}
+                    visibleCols={visibleCols}
+                    selected={selectedIds.has(c.id || c.uuid)}
+                    onToggleSelect={toggleSelect}
+                  />
+                );
+              })}
           </tbody>
         </table>
       </div>
@@ -3000,7 +3901,9 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
 
           <button
             className="cl-page-btn"
-            onClick={() => setDisplayPage((p) => Math.min(displayPages, p + 1))}
+            onClick={() =>
+              setDisplayPage((p) => Math.min(displayPages, p + 1))
+            }
             disabled={displayPage === displayPages}
           >
             ›
@@ -3036,7 +3939,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           name={historyModal.name}
           onClose={() => setHistoryModal(null)}
           agentDirectory={agentDirectory}
-          nameMap={nameMap}
         />
       )}
 
@@ -3057,7 +3959,18 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
       )}
 
       {exportModal && (
-        <ExportModal agents={agents} onClose={() => setExportModal(false)} />
+        <ExportModal
+          agents={agents}
+          onClose={() => setExportModal(false)}
+        />
+      )}
+
+      {tagModal && (
+        <TagModal
+          data={tagModal}
+          onClose={() => setTagModal(null)}
+          onSave={handleTagSave}
+        />
       )}
 
       {liveCallModal && (
@@ -3067,209 +3980,8 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           onEnd={() => handleEnd(liveCallModal.call)}
           onClose={() => setLiveCallModal(null)}
           agentDirectory={agentDirectory}
-          nameMap={nameMap}
         />
       )}
-
-      <style>{`
-        .cl-cache-info {
-          font-size: 11px;
-          color: #64748b;
-          padding: 4px 10px;
-          background: #f1f5f9;
-          border-radius: 20px;
-          border: 1px solid #e2e8f0;
-          white-space: nowrap;
-        }
-
-        .cl-server-pagination {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 8px 16px;
-          background: #fffbeb;
-          border: 1px solid #fde68a;
-          border-radius: 8px;
-          margin-bottom: 8px;
-          font-size: 13px;
-        }
-
-        .cl-server-page-info {
-          color: #92400e;
-          font-weight: 500;
-        }
-
-        .cl-server-page-btns {
-          display: flex;
-          gap: 8px;
-        }
-
-        /* ── Agent wrap ── */
-        .cl-agent-wrap {
-          display: flex;
-          flex-direction: column;
-          gap: 3px;
-        }
-
-        .cl-agent--none {
-          color: #94a3b8;
-          font-style: italic;
-        }
-
-        .cl-agent--answered {
-          color: #16a34a;
-          font-weight: 600;
-          font-size: 13px;
-        }
-
-        .cl-agent-num {
-          font-size: 11px;
-          color: #94a3b8;
-          font-family: 'SF Mono', 'Fira Code', monospace;
-        }
-
-        /* ── Single missed agent ── */
-        .cl-agent-missed {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 5px 8px;
-          background: linear-gradient(135deg, #fef2f2, #fff1f2);
-          border: 1px solid #fecaca;
-          border-radius: 8px;
-          border-left: 3px solid #ef4444;
-          min-width: 0;
-        }
-
-        .cl-agent-missed-icon {
-          font-size: 14px;
-          flex-shrink: 0;
-        }
-
-        .cl-agent-missed-info {
-          display: flex;
-          flex-direction: column;
-          gap: 1px;
-          min-width: 0;
-        }
-
-        .cl-agent-missed-label {
-          font-size: 9px;
-          color: #ef4444;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          white-space: nowrap;
-        }
-
-        .cl-agent-missed-name {
-          font-size: 12px;
-          font-weight: 600;
-          color: #dc2626;
-          word-break: break-word;
-        }
-
-        /* ── Multiple missed agents ── */
-        .cl-agent-missed-multi-header {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          padding: 4px 8px;
-          background: linear-gradient(135deg, #fef2f2, #fff1f2);
-          border: 1px solid #fecaca;
-          border-radius: 6px 6px 0 0;
-          border-left: 3px solid #ef4444;
-          border-bottom: none;
-        }
-
-        .cl-agent-missed-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0;
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-          border-top: 1px solid #fecaca30;
-          border-radius: 0 0 6px 6px;
-          border-left: 3px solid #ef4444;
-          padding: 4px 6px;
-          max-height: 120px;
-          overflow-y: auto;
-        }
-
-        .cl-agent-missed-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 6px;
-          padding: 3px 2px;
-          border-bottom: 1px solid #fecaca30;
-        }
-
-        .cl-agent-missed-item:last-child {
-          border-bottom: none;
-        }
-
-        .cl-agent-missed-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: #ef4444;
-          margin-top: 5px;
-          flex-shrink: 0;
-        }
-
-        .cl-agent-missed-item-info {
-          display: flex;
-          flex-direction: column;
-          gap: 1px;
-          min-width: 0;
-        }
-
-        .cl-agent-missed-item-name {
-          font-size: 12px;
-          font-weight: 600;
-          color: #dc2626;
-          word-break: break-word;
-        }
-
-        /* ── Routing ── */
-        .cl-routing-agent-num {
-          font-size: 10px;
-          color: #94a3b8;
-          font-family: monospace;
-        }
-
-        /* ── Edit name modal ── */
-        .cl-apply-all-label {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-          cursor: pointer;
-          font-size: 13px;
-          color: #374151;
-          line-height: 1.4;
-          padding: 10px 12px;
-          background: #f0fdf4;
-          border: 1px solid #bbf7d0;
-          border-radius: 8px;
-          margin-top: 2px;
-        }
-
-        .cl-apply-all-check {
-          margin-top: 2px;
-          flex-shrink: 0;
-          accent-color: #16a34a;
-          width: 16px;
-          height: 16px;
-          cursor: pointer;
-        }
-
-        .cl-apply-all-hint {
-          display: block;
-          font-size: 11px;
-          color: #6b7280;
-          margin-top: 2px;
-        }
-      `}</style>
     </div>
   );
 }
