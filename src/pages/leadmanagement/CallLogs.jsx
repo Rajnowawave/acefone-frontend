@@ -19,7 +19,6 @@ const SEARCH_DEBOUNCE = 300;
 const CACHE_VERSION = 2;
 
 // ─── Name Map Cache ───────────────────────────────────────────────────────────
-// Stores { last10digits -> name } mapping in localStorage
 const NAME_MAP_KEY = "cl_name_map_v1";
 
 const getNameMap = () => {
@@ -65,22 +64,18 @@ const getCache = () => {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-
     if (parsed.version !== CACHE_VERSION) {
       localStorage.removeItem(CACHE_KEY);
       return null;
     }
-
     if (Date.now() - parsed.ts > CACHE_TTL) {
       localStorage.removeItem(CACHE_KEY);
       return null;
     }
-
     if (!Array.isArray(parsed.calls)) {
       localStorage.removeItem(CACHE_KEY);
       return null;
     }
-
     return parsed;
   } catch (e) {
     console.error("Cache read error:", e);
@@ -118,12 +113,10 @@ const getHistoryCache = (number) => {
     const raw = sessionStorage.getItem(`hist_${number}`);
     if (!raw) return null;
     const { data, ts } = JSON.parse(raw);
-
     if (Date.now() - ts > HISTORY_CACHE_TTL) {
       sessionStorage.removeItem(`hist_${number}`);
       return null;
     }
-
     return data;
   } catch {
     return null;
@@ -139,7 +132,6 @@ const setHistoryCache = (number, data) => {
   } catch {}
 };
 
-// Invalidate history cache for a number so it refreshes with new name
 const invalidateHistoryCache = (number) => {
   try {
     const key = cleanNum(number);
@@ -220,15 +212,11 @@ const extractCallNumbers = (call) => {
 // ─── Resolve display name for a call (checks name map first) ─────────────────
 const resolveDisplayName = (call) => {
   if (!call) return null;
-
-  // Check all numbers from this call against nameMap
   const numbers = extractCallNumbers(call);
   for (const num of numbers) {
     const mapped = lookupName(num);
     if (mapped) return mapped;
   }
-
-  // Fall back to whatever name is stored on the call record itself
   return call.name || null;
 };
 
@@ -247,34 +235,24 @@ const getAgentNameFromMaster = (a) =>
 
 const safeTs = (c) => {
   if (!c?.createdAt && !c?.start_stamp) return 0;
-
   if (c?.createdAt?._seconds) return c.createdAt._seconds * 1000;
-
   const fromCreatedAt = new Date(c?.createdAt).getTime();
   if (!Number.isNaN(fromCreatedAt) && fromCreatedAt > 0) return fromCreatedAt;
-
   const fromStartStamp = new Date(c?.start_stamp).getTime();
   if (!Number.isNaN(fromStartStamp) && fromStartStamp > 0)
     return fromStartStamp;
-
   return 0;
 };
 
 const fmtDur = (s) => {
   s = Number(s) || 0;
   if (!s) return "—";
-
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-
   if (h) {
-    return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(
-      2,
-      "0"
-    )}`;
+    return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   }
-
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 };
 
@@ -288,7 +266,6 @@ const fmtSec = (s) => {
 const fmtTime = (c) => {
   const ts = safeTs(c);
   if (!ts) return { date: "—", time: "—" };
-
   const d = new Date(ts);
   return {
     date: d.toLocaleDateString("en-IN", {
@@ -322,12 +299,10 @@ const OUTCOMES = [
 // ─── Debounce Hook ────────────────────────────────────────────────────────────
 const useDebounce = (value, delay) => {
   const [debounced, setDebounced] = useState(value);
-
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delay);
     return () => clearTimeout(t);
   }, [value, delay]);
-
   return debounced;
 };
 
@@ -373,7 +348,6 @@ const buildAgentDirectory = (agents = []) => {
 
     const mobile = firstMobile(mobileCandidates);
     const ext = firstShortExt(extCandidates);
-
     const record = { raw: a, name, mobile, ext };
 
     if (mobile) byMobile.set(mobile, record);
@@ -394,30 +368,218 @@ const buildAgentDirectory = (agents = []) => {
 
 const findAgentInDirectory = (value, directory) => {
   if (!value || !directory) return null;
-
   const d = onlyDigits(value);
   if (!d) return null;
-
   const mobile = toIndianMobile10(d);
   if (mobile && directory.byMobile?.has(mobile)) {
     return directory.byMobile.get(mobile);
   }
-
   if (isShortExt(d) && directory.byExt?.has(d)) {
     return directory.byExt.get(d);
   }
-
   if (directory.byAny?.has(d)) {
     return directory.byAny.get(d);
   }
-
   if (d.length > 10 && directory.byAny?.has(d.slice(-10))) {
     return directory.byAny.get(d.slice(-10));
   }
-
   return null;
 };
 
+// ─── NEW: Resolve ALL missed agents from a single call record ─────────────────
+/**
+ * Extracts every missed agent entry from a call record.
+ * Handles:
+ *  - call_flow array (multiple agent nodes)
+ *  - missed_agents array
+ *  - answered_agent / missed_agent objects
+ *  - flat fields
+ * Returns array of { name, ext, number, source }
+ */
+const resolveAllMissedAgents = (call, agentDirectory) => {
+  if (!call) return [];
+
+  const results = [];
+  const seen = new Set(); // dedupe by name+ext
+
+  const addAgent = (name, ext, number, source) => {
+    const key = `${name || ""}|${ext || ""}|${number || ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push({ name, ext, number, source });
+  };
+
+  const resolveCandidate = (candidates, source) => {
+    let name = firstText(candidates.map((c) => c.name));
+    let mobile = firstMobile(candidates.map((c) => c.mobile || c.number || c.agent_number || ""));
+    let ext = firstShortExt(candidates.map((c) => c.ext || c.extension || ""));
+
+    // Try directory lookup
+    const allNums = candidates.flatMap((c) => [
+      c.mobile, c.number, c.agent_number, c.ext, c.extension, c.id,
+    ]).filter(Boolean);
+
+    let matched = null;
+    for (const v of allNums) {
+      matched = findAgentInDirectory(v, agentDirectory);
+      if (matched) break;
+    }
+
+    name = name || matched?.name || null;
+    mobile = mobile || matched?.mobile || null;
+    ext = ext || matched?.ext || null;
+
+    if (name || ext || mobile) {
+      addAgent(name, ext, mobile, source);
+    }
+  };
+
+  // 1. call_flow array — each agent node could be a separate agent
+  if (Array.isArray(call.call_flow)) {
+    call.call_flow.forEach((node, idx) => {
+      if (norm(node?.type) !== "agent") return;
+
+      const isMissedNode =
+        norm(node?.status) === "missed" ||
+        norm(node?.status) === "no-answer" ||
+        norm(node?.status) === "no_answer" ||
+        norm(node?.status) === "failed" ||
+        norm(node?.status) === "busy" ||
+        // if the whole call is missed and node has no explicit status, treat as missed
+        (["missed", "no-answer", "no_answer", "failed", "busy"].includes(
+          norm(call.call_status)
+        ) && !node?.status);
+
+      if (!isMissedNode) return;
+
+      const nameCandidates = [
+        node?.name,
+        node?.agent_name,
+        node?.agentName,
+        node?.displayName,
+      ];
+      const numCandidates = [
+        node?.num,
+        node?.number,
+        node?.agent_number,
+        node?.mobile,
+        node?.id,
+      ];
+      const extCandidates = [node?.extension, node?.ext, node?.exten];
+
+      const name = firstText(nameCandidates);
+      const mobile = firstMobile(numCandidates);
+      const ext = firstShortExt(extCandidates);
+
+      // Directory lookup
+      let matched = null;
+      for (const v of [...numCandidates, ...extCandidates].filter(Boolean)) {
+        matched = findAgentInDirectory(v, agentDirectory);
+        if (matched) break;
+      }
+
+      const finalName = name || matched?.name || null;
+      const finalMobile = mobile || matched?.mobile || null;
+      const finalExt = ext || matched?.ext || null;
+
+      if (finalName || finalExt || finalMobile) {
+        addAgent(finalName, finalExt, finalMobile, `flow_${idx}`);
+      }
+    });
+  }
+
+  // 2. missed_agents array (some APIs return this)
+  if (Array.isArray(call.missed_agents)) {
+    call.missed_agents.forEach((a, idx) => {
+      const obj = getSafeObj(a);
+      if (!obj) return;
+      const name = firstText([obj.name, obj.agent_name, obj.agentName]);
+      const mobile = firstMobile([obj.agent_number, obj.mobile, obj.number, obj.num]);
+      const ext = firstShortExt([obj.extension, obj.ext, obj.exten]);
+
+      let matched = null;
+      for (const v of [obj.agent_number, obj.mobile, obj.number, obj.num, obj.extension, obj.ext, obj.id].filter(Boolean)) {
+        matched = findAgentInDirectory(v, agentDirectory);
+        if (matched) break;
+      }
+
+      const finalName = name || matched?.name || null;
+      const finalMobile = mobile || matched?.mobile || null;
+      const finalExt = ext || matched?.ext || null;
+
+      if (finalName || finalExt || finalMobile) {
+        addAgent(finalName, finalExt, finalMobile, `missed_arr_${idx}`);
+      }
+    });
+  }
+
+  // 3. missed_agent single object
+  const missedObj = getSafeObj(call.missed_agent);
+  if (missedObj) {
+    const name = firstText([missedObj.name, missedObj.agent_name]);
+    const mobile = firstMobile([missedObj.agent_number, missedObj.mobile, missedObj.number, missedObj.num]);
+    const ext = firstShortExt([missedObj.extension, missedObj.ext]);
+
+    let matched = null;
+    for (const v of [missedObj.agent_number, missedObj.mobile, missedObj.number, missedObj.num, missedObj.extension, missedObj.ext, missedObj.id].filter(Boolean)) {
+      matched = findAgentInDirectory(v, agentDirectory);
+      if (matched) break;
+    }
+
+    const finalName = name || matched?.name || null;
+    const finalMobile = mobile || matched?.mobile || null;
+    const finalExt = ext || matched?.ext || null;
+
+    if (finalName || finalExt || finalMobile) {
+      addAgent(finalName, finalExt, finalMobile, "missed_obj");
+    }
+  }
+
+  // 4. Flat fields (fallback)
+  // Only add if nothing found yet from structured data
+  if (results.length === 0) {
+    const flatNameCandidates = [
+      call.missed_agent_name,
+      call.agent_name,
+      call.agentName,
+      call.agent,
+      call.assigned_agent,
+      call.handled_by,
+    ];
+    const flatMobileCandidates = [
+      call.missed_agent_mobile,
+      call.agent_mobile,
+      call.agent_number,
+    ];
+    const flatExtCandidates = [
+      call.agent_extension,
+      call.extension,
+      call.ext,
+    ];
+
+    const name = firstText(flatNameCandidates);
+    const mobile = firstMobile(flatMobileCandidates);
+    const ext = firstShortExt(flatExtCandidates);
+
+    let matched = null;
+    for (const v of [...flatMobileCandidates, ...flatExtCandidates].filter(Boolean)) {
+      matched = findAgentInDirectory(v, agentDirectory);
+      if (matched) break;
+    }
+
+    const finalName = name || matched?.name || null;
+    const finalMobile = mobile || matched?.mobile || null;
+    const finalExt = ext || matched?.ext || null;
+
+    if (finalName || finalExt || finalMobile) {
+      addAgent(finalName, finalExt, finalMobile, "flat");
+    }
+  }
+
+  return results;
+};
+
+// ─── Resolve single agent info (for answered calls, live modal, etc.) ─────────
 const resolveAgentInfo = (call, agentDirectory) => {
   if (!call) {
     return {
@@ -570,7 +732,6 @@ const buildCallChain = (allCalls, currentCall) => {
         c.client_number || c.caller_id_number || c.call_to_number || ""
       );
       const cTs = safeTs(c);
-
       return (
         cNum === currentNum &&
         cTs &&
@@ -638,12 +799,10 @@ const apiFetch = async (url, options = {}) => {
         ...(options.headers || {}),
       },
     });
-
     if (!resp.ok) {
       const errData = await resp.json().catch(() => ({}));
       throw new Error(errData.error || `HTTP ${resp.status}`);
     }
-
     return resp;
   } catch (e) {
     console.error(`API Error [${url}]:`, e);
@@ -662,7 +821,6 @@ const Badge = React.memo(({ status, direction, outcome }) => {
     const d = norm(direction);
     const isIn = d === "inbound";
     const isClickToCall = d === "clicktocall";
-
     return (
       <span
         className={`cl-badge ${
@@ -715,13 +873,8 @@ const Badge = React.memo(({ status, direction, outcome }) => {
   return <span className={`cl-badge ${m.cls}`}>{m.label}</span>;
 });
 
-// ─── AgentDisplay ─────────────────────────────────────────────────────────────
+// ─── AgentDisplay — NOW SHOWS ALL MISSED AGENTS ───────────────────────────────
 const AgentDisplay = React.memo(({ call, agentDirectory }) => {
-  const info = useMemo(
-    () => resolveAgentInfo(call, agentDirectory),
-    [call, agentDirectory]
-  );
-
   const isMissed = [
     "missed",
     "no-answer",
@@ -730,31 +883,82 @@ const AgentDisplay = React.memo(({ call, agentDirectory }) => {
     "busy",
   ].includes(norm(call.call_status));
 
-  if (!info.label) {
+  // For missed calls: resolve ALL missed agents
+  const allMissedAgents = useMemo(() => {
+    if (!isMissed) return [];
+    return resolveAllMissedAgents(call, agentDirectory);
+  }, [call, agentDirectory, isMissed]);
+
+  // For answered calls: resolve single agent info
+  const info = useMemo(
+    () => (!isMissed ? resolveAgentInfo(call, agentDirectory) : null),
+    [call, agentDirectory, isMissed]
+  );
+
+  // ── MISSED CALL: show all agents ──
+  if (isMissed) {
+    if (allMissedAgents.length === 0) {
+      return <span className="cl-agent cl-agent--none">—</span>;
+    }
+
+    if (allMissedAgents.length === 1) {
+      const agent = allMissedAgents[0];
+      return (
+        <div className="cl-agent-wrap">
+          <div className="cl-agent-missed">
+            <span className="cl-agent-missed-icon">📵</span>
+            <div className="cl-agent-missed-info">
+              <span className="cl-agent-missed-label">Missed by</span>
+              <span className="cl-agent-missed-name">
+                {agent.name || agent.number || agent.ext || "Unknown"}
+              </span>
+            </div>
+          </div>
+          {agent.ext && (
+            <span className="cl-agent-num">Ext: {agent.ext}</span>
+          )}
+        </div>
+      );
+    }
+
+    // Multiple missed agents
+    return (
+      <div className="cl-agent-wrap">
+        <div className="cl-agent-missed-multi-header">
+          <span className="cl-agent-missed-icon">📵</span>
+          <span className="cl-agent-missed-label">
+            Missed by {allMissedAgents.length} agents
+          </span>
+        </div>
+        <div className="cl-agent-missed-list">
+          {allMissedAgents.map((agent, idx) => (
+            <div key={idx} className="cl-agent-missed-item">
+              <span className="cl-agent-missed-dot" />
+              <div className="cl-agent-missed-item-info">
+                <span className="cl-agent-missed-item-name">
+                  {agent.name || agent.number || agent.ext || "Unknown"}
+                </span>
+                {agent.ext && (
+                  <span className="cl-agent-num">Ext: {agent.ext}</span>
+                )}
+                {!agent.ext && agent.number && (
+                  <span className="cl-agent-num">{agent.number}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── ANSWERED CALL ──
+  if (!info?.label) {
     return <span className="cl-agent cl-agent--none">—</span>;
   }
 
   let subText = null;
-  if (info.name && info.ext) {
-    subText = `Ext: ${info.ext}`;
-  } else if (!info.name && info.ext) {
-    subText = `Ext: ${info.ext}`;
-  }
-
-  if (isMissed) {
-    return (
-      <div className="cl-agent-wrap">
-        <div className="cl-agent-missed">
-          <span className="cl-agent-missed-icon">📵</span>
-          <div className="cl-agent-missed-info">
-            <span className="cl-agent-missed-label">Missed by</span>
-            <span className="cl-agent-missed-name">{info.label}</span>
-          </div>
-        </div>
-        {subText && <span className="cl-agent-num">{subText}</span>}
-      </div>
-    );
-  }
+  if (info.ext) subText = `Ext: ${info.ext}`;
 
   return (
     <div className="cl-agent-wrap">
@@ -800,15 +1004,11 @@ const CallRoutingBadge = React.memo(({ routing }) => {
               <div className="cl-routing-step-content">
                 <span className="cl-routing-agent-name">{agent.name}</span>
                 {agent.ext ? (
-                  <span className="cl-routing-agent-num">
-                    Ext: {agent.ext}
-                  </span>
+                  <span className="cl-routing-agent-num">Ext: {agent.ext}</span>
                 ) : agent.number ? (
                   <span className="cl-routing-agent-num">{agent.number}</span>
                 ) : null}
-                <span className="cl-routing-step-status">
-                  ✗ Did not answer
-                </span>
+                <span className="cl-routing-step-status">✗ Did not answer</span>
               </div>
             </div>
           ))}
@@ -829,18 +1029,14 @@ const CallRoutingBadge = React.memo(({ routing }) => {
                     {routing.answeredBy.number}
                   </span>
                 ) : null}
-                <span className="cl-routing-step-status">
-                  ✓ Answered the call
-                </span>
+                <span className="cl-routing-step-status">✓ Answered the call</span>
               </div>
             </div>
           ) : (
             <div className="cl-routing-step cl-routing-step--none">
               <div className="cl-routing-dot cl-routing-dot--none" />
               <div className="cl-routing-step-content">
-                <span className="cl-routing-step-status">
-                  ✗ No one answered
-                </span>
+                <span className="cl-routing-step-status">✗ No one answered</span>
               </div>
             </div>
           )}
@@ -853,7 +1049,6 @@ const CallRoutingBadge = React.memo(({ routing }) => {
 // ─── LiveTimer ────────────────────────────────────────────────────────────────
 const LiveTimer = ({ startedAt }) => {
   const [sec, setSec] = useState(0);
-
   useEffect(() => {
     const iv = setInterval(
       () => setSec(Math.floor((Date.now() - startedAt) / 1000)),
@@ -861,7 +1056,6 @@ const LiveTimer = ({ startedAt }) => {
     );
     return () => clearInterval(iv);
   }, [startedAt]);
-
   return <span className="cl-live-timer">{fmtSec(sec)}</span>;
 };
 
@@ -894,19 +1088,16 @@ const RecordingPlayer = React.memo(({ call }) => {
 
   const handlePlay = () => {
     if (!audioRef.current) return;
-
     if (state === "playing") {
       audioRef.current.pause();
       setState("paused");
       return;
     }
-
     if (state === "paused") {
       audioRef.current.play().catch(() => setState("error"));
       setState("playing");
       return;
     }
-
     setState("loading");
     audioRef.current.src = call.recording_url;
     audioRef.current.load();
@@ -1013,13 +1204,11 @@ const MiniHistory = ({ number, agentDirectory, nameMap }) => {
   useEffect(() => {
     const cleanedNum = cleanNum(number);
     const cached = getHistoryCache(cleanedNum);
-
     if (cached) {
       setCalls(cached);
       setLoading(false);
       return;
     }
-
     apiJson(`/customer-history/${cleanedNum}`)
       .then((d) => {
         setCalls(d);
@@ -1048,12 +1237,10 @@ const MiniHistory = ({ number, agentDirectory, nameMap }) => {
       <p className="cl-mini-history-title">
         Last {calls.length} calls with this customer
       </p>
-
       {calls.slice(0, 8).map((c, i) => {
         const { date, time } = fmtTime(c);
         const isMissed = norm(c.call_status).includes("miss");
         const agentInfo = resolveAgentInfo(c, agentDirectory);
-        // Apply name map for display
         const displayName = resolveDisplayName(c) || c.name;
 
         return (
@@ -1064,26 +1251,22 @@ const MiniHistory = ({ number, agentDirectory, nameMap }) => {
             }`}
           >
             <div className="cl-hist-icon">{isMissed ? "📵" : "📞"}</div>
-
             <div className="cl-hist-content">
               <div className="cl-hist-badges">
                 <Badge direction={c.direction} />
                 <Badge status={c.call_status} />
                 <span className="cl-mono">{fmtDur(c.billsec)}</span>
               </div>
-
               {displayName && (
                 <div className="cl-hist-agent" style={{ color: "#94a3b8" }}>
                   Customer: <strong>{displayName}</strong>
                 </div>
               )}
-
               <div className="cl-hist-agent" style={{ color: "#94a3b8" }}>
                 Agent: <strong>{agentInfo.label || "—"}</strong>
                 {agentInfo.ext ? ` (Ext: ${agentInfo.ext})` : ""}
               </div>
             </div>
-
             <div className="cl-hist-time">
               <div className="cl-hist-date" style={{ color: "#e2e8f0" }}>
                 {date}
@@ -1126,13 +1309,11 @@ const LiveCallModal = ({
         ""
       : call.call_to_number || call.client_number || "";
 
-  // Use nameMap resolved name
   const displayName = resolveDisplayName(call) || call.name;
 
   const saveQuickNote = async () => {
     if (!note.trim()) return;
     setSavingNote(true);
-
     try {
       await apiJson("/remarks", {
         method: "POST",
@@ -1147,7 +1328,6 @@ const LiveCallModal = ({
     } catch (e) {
       console.error("Save note failed:", e);
     }
-
     setSavingNote(false);
   };
 
@@ -1208,25 +1388,19 @@ const LiveCallModal = ({
           <div className="cl-live-body">
             <div className="cl-live-controls">
               <button
-                className={`cl-live-ctrl-btn ${
-                  muted ? "cl-live-ctrl-btn--active" : ""
-                }`}
+                className={`cl-live-ctrl-btn ${muted ? "cl-live-ctrl-btn--active" : ""}`}
                 onClick={() => setMuted((m) => !m)}
               >
                 <span className="cl-live-ctrl-icon">{muted ? "🔇" : "🎙"}</span>
                 <span>{muted ? "Unmute" : "Mute"}</span>
               </button>
-
               <button
-                className={`cl-live-ctrl-btn ${
-                  held ? "cl-live-ctrl-btn--active" : ""
-                }`}
+                className={`cl-live-ctrl-btn ${held ? "cl-live-ctrl-btn--active" : ""}`}
                 onClick={() => setHeld((h) => !h)}
               >
                 <span className="cl-live-ctrl-icon">{held ? "▶" : "⏸"}</span>
                 <span>{held ? "Resume" : "Hold"}</span>
               </button>
-
               <button className="cl-live-ctrl-btn">
                 <span className="cl-live-ctrl-icon">🔀</span>
                 <span>Transfer</span>
@@ -1256,11 +1430,7 @@ const LiveCallModal = ({
                     }`}
                     style={
                       outcome === o.v
-                        ? {
-                            background: o.color,
-                            color: "#fff",
-                            borderColor: o.color,
-                          }
+                        ? { background: o.color, color: "#fff", borderColor: o.color }
                         : { borderColor: `${o.color}60`, color: o.color }
                     }
                     onClick={() => setOutcome(outcome === o.v ? "" : o.v)}
@@ -1320,7 +1490,6 @@ const LiveCallModal = ({
                   "💾 Save Note"
                 )}
               </button>
-
               <button className="cl-btn-end-call" onClick={onEnd}>
                 📵 End Call
               </button>
@@ -1364,11 +1533,9 @@ const RemarkModal = ({ data, onClose, onSave }) => {
   const submit = async () => {
     if (!remark.trim()) return;
     setSaving(true);
-
     const text = outcome
       ? `[${outcome.toUpperCase()}] ${remark.trim()}`
       : remark.trim();
-
     try {
       await apiJson("/remarks", {
         method: "POST",
@@ -1383,7 +1550,6 @@ const RemarkModal = ({ data, onClose, onSave }) => {
     } catch (e) {
       console.error("Save remark failed:", e);
     }
-
     setSaving(false);
     onClose();
   };
@@ -1479,19 +1645,16 @@ const HistoryModal = ({ number, name, onClose, agentDirectory, nameMap }) => {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Resolve best name: prefer nameMap, then passed name
   const displayName = lookupName(number) || name;
 
   useEffect(() => {
     const cleanedNum = cleanNum(number);
     const cached = getHistoryCache(cleanedNum);
-
     if (cached) {
       setCalls(cached);
       setLoading(false);
       return;
     }
-
     apiJson(`/customer-history/${cleanedNum}`)
       .then((d) => {
         setCalls(d);
@@ -1558,43 +1721,35 @@ const HistoryModal = ({ number, name, onClose, agentDirectory, nameMap }) => {
             const { date, time } = fmtTime(c);
             const isMissed = norm(c.call_status).includes("miss");
             const agentInfo = resolveAgentInfo(c, agentDirectory);
-            // Show resolved name for each history entry too
             const entryName = resolveDisplayName(c) || displayName;
 
             return (
               <div
                 key={c.id || c.uuid || i}
-                className={`cl-hist-item ${
-                  isMissed ? "cl-hist-item--missed" : ""
-                }`}
+                className={`cl-hist-item ${isMissed ? "cl-hist-item--missed" : ""}`}
               >
                 <div className="cl-hist-icon">{isMissed ? "📵" : "📞"}</div>
-
                 <div className="cl-hist-content">
                   <div className="cl-hist-badges">
                     <Badge direction={c.direction} />
                     <Badge status={c.call_status} />
                     <span className="cl-mono">{fmtDur(c.billsec)}</span>
                   </div>
-
                   {entryName && (
                     <div className="cl-hist-agent">
                       Customer: <strong>{entryName}</strong>
                     </div>
                   )}
-
                   <div className="cl-hist-agent">
                     Agent: <strong>{agentInfo.label || "—"}</strong>
                     {agentInfo.ext ? ` (Ext: ${agentInfo.ext})` : ""}
                   </div>
-
                   {c.recording_url?.startsWith("http") && (
                     <div style={{ marginTop: 6 }}>
                       <RecordingPlayer call={c} />
                     </div>
                   )}
                 </div>
-
                 <div className="cl-hist-time">
                   <div className="cl-hist-date">{date}</div>
                   <div className="cl-mono cl-xs">{time}</div>
@@ -1679,7 +1834,6 @@ const EditNameModal = ({ data, onClose, onSave }) => {
             />
           </div>
 
-          {/* Apply to all numbers toggle */}
           <div className="cl-form-group">
             <label className="cl-apply-all-label">
               <input
@@ -1737,7 +1891,6 @@ const ExportModal = ({ agents, onClose }) => {
 
   const handleDownload = async () => {
     setDownloading(true);
-
     try {
       const params = new URLSearchParams();
       if (exDir !== "all") params.set("direction", exDir);
@@ -1761,7 +1914,6 @@ const ExportModal = ({ agents, onClose }) => {
       console.error("Export failed:", e);
       alert("Export failed: " + e.message);
     }
-
     setDownloading(false);
   };
 
@@ -1888,7 +2040,7 @@ const CallRow = React.memo(
     onDelete,
     onEditName,
     onOpenLive,
-    nameMap, // receive nameMap for reactivity
+    nameMap,
   }) => {
     const dir = norm(c.direction);
 
@@ -1911,10 +2063,7 @@ const CallRow = React.memo(
     const isInbound = dir === "inbound";
     const { date, time } = fmtTime(c);
 
-    // Resolve display name from nameMap first, then fall back to c.name
-    // nameMap is passed so React re-renders when it changes
     const displayName = useMemo(() => {
-      // nameMap dependency ensures re-render when names change
       return resolveDisplayName(c) || null;
     }, [c, nameMap]);
 
@@ -2026,9 +2175,7 @@ const CallRow = React.memo(
               <button
                 onClick={() => onCall(c)}
                 disabled={isCalling || !!activeCall}
-                className={`cl-btn-call ${
-                  isCalling ? "cl-btn-call--busy" : ""
-                }`}
+                className={`cl-btn-call ${isCalling ? "cl-btn-call--busy" : ""}`}
                 title={
                   activeCall && !isActive
                     ? "Another call is active"
@@ -2119,9 +2266,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
   const [exportModal, setExportModal] = useState(false);
   const [liveCallModal, setLiveCallModal] = useState(null);
   const [toast, setToast] = useState({ show: false, msg: "", ok: true });
-
-  // ── nameMap state: triggers re-render of all rows when a name is saved ──
-  // We store it as a state so React knows to re-render
   const [nameMap, setNameMap] = useState(() => getNameMap());
 
   const toastT = useRef();
@@ -2212,7 +2356,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
     fetchCalls(false, 1);
   }, [fetchCalls]);
 
-  // Auto refresh
   useEffect(() => {
     const doAutoRefresh = () => {
       if (document.hidden) return;
@@ -2221,21 +2364,15 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
       if (cached && Date.now() - cached.ts < CACHE_TTL) return;
       fetchCalls(false, serverPage);
     };
-
     autoRefreshRef.current = setInterval(doAutoRefresh, AUTO_REFRESH_INTERVAL);
     return () => clearInterval(autoRefreshRef.current);
   }, [fetchCalls, activeCall, serverPage]);
 
   const handleServerPageChange = useCallback(
     (newPage) => {
-      if (
-        newPage < 1 ||
-        newPage > totalServerPages ||
-        newPage === serverPage
-      ) {
+      if (newPage < 1 || newPage > totalServerPages || newPage === serverPage) {
         return;
       }
-
       fetchCalls(true, newPage);
       setDisplayPage(1);
     },
@@ -2250,7 +2387,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
       const q = search.toLowerCase();
       r = r.filter((c) => {
         const info = resolveAgentInfo(c, agentDirectory);
-        // Also search by resolved name from nameMap
         const resolvedName = resolveDisplayName(c) || "";
         return [
           c.call_to_number,
@@ -2321,7 +2457,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
     sortKey,
     sortDir,
     agentDirectory,
-    nameMap, // re-filter when names change
+    nameMap,
   ]);
 
   useEffect(() => {
@@ -2332,42 +2468,32 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
     const answered = filteredCalls.filter((c) =>
       ["answered", "completed", "connected"].includes(norm(c.call_status))
     ).length;
-
     const missed = filteredCalls.filter((c) =>
-      ["missed", "no_answer", "no-answer", "failed"].includes(
-        norm(c.call_status)
-      )
+      ["missed", "no_answer", "no-answer", "failed"].includes(norm(c.call_status))
     ).length;
-
     const totalDuration = filteredCalls.reduce(
       (s, c) => s + (Number(c.billsec) || 0),
       0
     );
-
     return { answered, missed, totalDuration };
   }, [filteredCalls]);
 
   const uniqueAgents = useMemo(() => {
     const names = new Set();
-
     agents.forEach((a) => {
       const n = getAgentNameFromMaster(a);
       if (n) names.add(n);
     });
-
     allCalls.forEach((c) => {
       const info = resolveAgentInfo(c, agentDirectory);
       if (info.name) names.add(info.name);
-
       if (c.answered_agent_name && isTextName(c.answered_agent_name)) {
         names.add(c.answered_agent_name);
       }
-
       if (c.answered_agent?.name && isTextName(c.answered_agent.name)) {
         names.add(c.answered_agent.name);
       }
     });
-
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [allCalls, agents, agentDirectory]);
 
@@ -2442,12 +2568,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
         if (d.success) {
           showToast(`📞 Calling ${c.name || num}...`);
           const startedAt = Date.now();
-          setActiveCall({
-            key,
-            number: num,
-            name: c.name || "",
-            startedAt,
-          });
+          setActiveCall({ key, number: num, name: c.name || "", startedAt });
           setLiveCallModal({ call: c, startedAt });
           onCallMade?.({ ...c, calledAt: startedAt, agentId: selectedAgent });
         } else {
@@ -2476,7 +2597,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
       const num =
         c?.call_to_number || c?.caller_id_number || activeCall?.number || "";
       const key = c?.id || c?.uuid || num;
-
       setActiveCall(null);
       setLiveCallModal(null);
       setCallingRows((p) => {
@@ -2497,7 +2617,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
       } catch (e) {
         console.error("Delete failed:", e);
       }
-
       updateLocalAndCache((prev) => prev.filter((c) => c.id !== id));
       invalidateCache();
       showToast("Record deleted");
@@ -2505,19 +2624,11 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
     [showToast, updateLocalAndCache]
   );
 
-  /**
-   * handleEditName
-   * - Updates the specific call record's name (single record patch)
-   * - If applyToAll=true, also saves to nameMap so ALL calls from
-   *   that number show the same name without extra Firebase reads
-   */
   const handleEditName = useCallback(
     (id, name, number, applyToAll = true) => {
-      // 1. Always update the specific call record locally + DB
       updateLocalAndCache((prev) =>
         prev.map((c) => {
           if (c.id === id) return { ...c, name };
-          // If applyToAll, also update matching numbers in memory
           if (applyToAll) {
             const callNums = extractCallNumbers(c);
             const targetNum = cleanNum(number);
@@ -2529,16 +2640,12 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
         })
       );
 
-      // 2. Save to nameMap in localStorage for cross-page persistence
       if (applyToAll && number) {
         updateNameMap(number, name);
-        // Sync React state so all rows re-render
         setNameMap(getNameMap());
-        // Invalidate history cache for this number so history modal refreshes
         invalidateHistoryCache(number);
       }
 
-      // 3. Single DB write: patch only the clicked record
       apiFetch(`/call-logs/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ name }),
@@ -2567,10 +2674,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
     [showToast, updateLocalAndCache]
   );
 
-  const handleOpenLive = useCallback(
-    (payload) => setLiveCallModal(payload),
-    []
-  );
+  const handleOpenLive = useCallback((payload) => setLiveCallModal(payload), []);
   const handleOpenRemark = useCallback((data) => setRemarkModal(data), []);
   const handleOpenHistory = useCallback((data) => setHistoryModal(data), []);
   const handleOpenDelete = useCallback((data) => setDeleteModal(data), []);
@@ -2612,7 +2716,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           <h2 className="cl-title">
             <span className="cl-title-icon">📞</span> Call Logs
           </h2>
-
           <div className="cl-summary-badges">
             <span className="cl-sum-badge cl-sum-badge--total">
               Total: {filteredCalls.length}
@@ -2636,14 +2739,12 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
               {cacheInfo.fromCache ? "📦 Cached" : "🌐 Live"} · {cacheAgeStr}
             </span>
           )}
-
           <button
             onClick={() => setExportModal(true)}
             className="cl-btn cl-btn--outline"
           >
             📥 Export
           </button>
-
           <button
             onClick={() => {
               invalidateCache();
@@ -2866,7 +2967,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           >
             «
           </button>
-
           <button
             className="cl-page-btn"
             onClick={() => setDisplayPage((p) => Math.max(1, p - 1))}
@@ -2900,14 +3000,11 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
 
           <button
             className="cl-page-btn"
-            onClick={() =>
-              setDisplayPage((p) => Math.min(displayPages, p + 1))
-            }
+            onClick={() => setDisplayPage((p) => Math.min(displayPages, p + 1))}
             disabled={displayPage === displayPages}
           >
             ›
           </button>
-
           <button
             className="cl-page-btn"
             onClick={() => setDisplayPage(displayPages)}
@@ -2974,7 +3071,6 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
         />
       )}
 
-      {/* Inline styles */}
       <style>{`
         .cl-cache-info {
           font-size: 11px;
@@ -3008,6 +3104,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           gap: 8px;
         }
 
+        /* ── Agent wrap ── */
         .cl-agent-wrap {
           display: flex;
           flex-direction: column;
@@ -3031,6 +3128,7 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           font-family: 'SF Mono', 'Fira Code', monospace;
         }
 
+        /* ── Single missed agent ── */
         .cl-agent-missed {
           display: flex;
           align-items: center;
@@ -3071,13 +3169,76 @@ export default function CallLogs({ selectedAgent, agents = [], onCallMade }) {
           word-break: break-word;
         }
 
+        /* ── Multiple missed agents ── */
+        .cl-agent-missed-multi-header {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          padding: 4px 8px;
+          background: linear-gradient(135deg, #fef2f2, #fff1f2);
+          border: 1px solid #fecaca;
+          border-radius: 6px 6px 0 0;
+          border-left: 3px solid #ef4444;
+          border-bottom: none;
+        }
+
+        .cl-agent-missed-list {
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+          background: #fef2f2;
+          border: 1px solid #fecaca;
+          border-top: 1px solid #fecaca30;
+          border-radius: 0 0 6px 6px;
+          border-left: 3px solid #ef4444;
+          padding: 4px 6px;
+          max-height: 120px;
+          overflow-y: auto;
+        }
+
+        .cl-agent-missed-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 6px;
+          padding: 3px 2px;
+          border-bottom: 1px solid #fecaca30;
+        }
+
+        .cl-agent-missed-item:last-child {
+          border-bottom: none;
+        }
+
+        .cl-agent-missed-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #ef4444;
+          margin-top: 5px;
+          flex-shrink: 0;
+        }
+
+        .cl-agent-missed-item-info {
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+          min-width: 0;
+        }
+
+        .cl-agent-missed-item-name {
+          font-size: 12px;
+          font-weight: 600;
+          color: #dc2626;
+          word-break: break-word;
+        }
+
+        /* ── Routing ── */
         .cl-routing-agent-num {
           font-size: 10px;
           color: #94a3b8;
           font-family: monospace;
         }
 
-        /* Edit name modal enhancements */
+        /* ── Edit name modal ── */
         .cl-apply-all-label {
           display: flex;
           align-items: flex-start;
